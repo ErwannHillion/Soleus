@@ -24,6 +24,10 @@ config :soleus, Oban,
      crontab: [
        # Ajustement quotidien des modeles, un peu apres minuit : la fenetre
        # glissante de 90 jours bouge chaque jour, meme sans nouvelle seance.
+       # Synchronisation Garmin au petit matin, avant l'ajustement : les
+       # seances de la veille sont alors deja en base quand les modeles se
+       # recalculent.
+       {"10 0 * * *", Soleus.Workers.SyncGarmin},
        {"20 0 * * *", Soleus.Workers.FitModels}
      ]}
   ]

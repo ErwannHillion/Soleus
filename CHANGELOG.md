@@ -25,6 +25,10 @@ fichier, au format [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 - Import de masse `mix soleus.import` d'un export RGPD Garmin, et
   `mix soleus.enrich` pour poser les noms de séance depuis le résumé JSON
 
+- Client de l'API personnelle Garmin : échange de clé contre jeton avec
+  renouvellement avant échéance, recherche d'activités, téléchargement du
+  fichier d'origine, synchronisation Oban quotidienne et `mix soleus.garmin`
+
 ### Fixed
 
 - FC moyenne des efforts records sur les fichiers à enregistrement intelligent :

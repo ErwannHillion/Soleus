@@ -58,6 +58,38 @@ Trois chemins, complementaires :
 La combinaison retenue est l'export RGPD pour amorcer l'historique, puis la
 Personal API pour l'incremental quotidien.
 
+### Import de l'export RGPD
+
+```sh
+unzip -d priv/import/fit <export>/DI_CONNECT/DI-Connect-Uploaded-Files/UploadedFiles_*.zip
+mix soleus.import
+mix soleus.enrich <export>/DI_CONNECT/DI-Connect-Fitness/*_summarizedActivities.json
+mix soleus.rebuild
+```
+
+Un export contient surtout des fichiers qui ne sont pas des seances : sur
+8 675 fichiers, 131 sont des activites, le reste etant du suivi quotidien et
+de la HRV nocturne. L'import les ecarte tout seul.
+
+### Brancher la Personal API
+
+```sh
+# 1. creer une cle sur https://connect.garmin.com/app/settings/personalApiToken
+#    (elle n'est affichee qu'une seule fois)
+# 2. la poser dans .env
+echo 'GARMIN_API_KEY=...' >> .env
+
+mix soleus.garmin check     # verifie la cle et interroge un endpoint reel
+mix soleus.garmin sync      # synchronise les 7 derniers jours
+```
+
+Une fois la cle en place, `Soleus.Workers.SyncGarmin` tourne chaque nuit a
+00h10, juste avant le reajustement des modeles.
+
+La cle expire au bout d'un an au plus et Garmin n'emet **pas** de jeton de
+rafraichissement : le jour ou elle expire, la synchronisation s'arrete avec un
+message explicite et il faut en regenerer une a la main.
+
 ## Reconstruire les donnees derivees
 
 ```sh

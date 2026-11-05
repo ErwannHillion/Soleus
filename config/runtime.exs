@@ -27,6 +27,13 @@ end
 #
 # 4006 et non 4000 : plusieurs projets du poste de developpement ecoutent en
 # meme temps, et le port par defaut de Phoenix est deja pris ailleurs.
+# Cle personnelle Garmin Connect, creee sur
+# https://connect.garmin.com/app/settings/personalApiToken
+#
+# Optionnelle : sans elle, l'import de fichiers FIT fonctionne normalement,
+# seule la synchronisation automatique est inactive.
+config :soleus, garmin_api_key: System.get_env("GARMIN_API_KEY")
+
 config :soleus, SoleusWeb.Endpoint,
   http: [port: String.to_integer(System.get_env("PORT", "4006"))]
 

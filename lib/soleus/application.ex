@@ -12,6 +12,7 @@ defmodule Soleus.Application do
       Soleus.Repo,
       {DNSCluster, query: Application.get_env(:soleus, :dns_cluster_query) || :ignore},
       {Oban, Application.fetch_env!(:soleus, Oban)},
+      Soleus.Ingest.Garmin.Token,
       {Phoenix.PubSub, name: Soleus.PubSub},
       # Start a worker by calling: Soleus.Worker.start_link(arg)
       # {Soleus.Worker, arg},
