@@ -24,9 +24,14 @@ defmodule Soleus.Config do
   Dossier surveille pour l'import des fichiers FIT.
 
   C'est la qu'on depose un export Garmin decompresse.
+
+  Le chemin est relatif au repertoire courant, et non derive de
+  `:code.priv_dir/1` : en developpement, `priv` dans le repertoire de build
+  n'est qu'un lien symbolique, et les chemins conserves en base pointeraient
+  vers `_build`, que `mix clean` efface.
   """
   @spec fit_import_dir() :: Path.t()
-  def fit_import_dir, do: get(:fit_import_dir, Path.join(:code.priv_dir(:soleus), "import"))
+  def fit_import_dir, do: get(:fit_import_dir, "priv/import")
 
   @doc """
   Sport par defaut du tableau de bord.

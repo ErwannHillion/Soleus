@@ -108,6 +108,46 @@ defmodule Soleus.Ingest.Fit do
     points = Enum.filter(records, &(&1.kind == "record"))
     session = Enum.find(records, &(&1.kind == "session"))
 
+    if activity?(session, points) do
+      build_activity(records, session, points, digest)
+    else
+      {:error, :not_an_activity}
+    end
+  end
+
+  # Duree au dela de laquelle un fichier ne decrit plus une seance. Garmin
+  # produit des fichiers d'accumulation marques `generic` qui portent un
+  # message `session` en bonne et due forme, mais couvrent plusieurs jours :
+  # sur un export reel, l'un d'eux totalise 893 km en 5,2 jours a 0,3 m/s.
+  #
+  # Ils passaient donc le filtre et entraient en base comme des seances. La
+  # consequence n'etait pas anodine : leur duree produisait une charge
+  # d'entrainement de plusieurs milliers de points, qui ecrasait la courbe de
+  # forme de toute la periode.
+  @max_session_s 24 * 3600
+
+  # Un export Garmin complet contient surtout des fichiers qui ne sont pas des
+  # seances : suivi quotidien, variabilite cardiaque nocturne, sauvegardes de
+  # reglages. Sur 8 675 fichiers d'un export reel, 131 seulement sont des
+  # activites.
+  #
+  # Le marqueur principal est le message `session`, que seule une activite
+  # porte. La tolerance sur `record` garde le cas des fichiers reconstruits ou
+  # produits par un appareil tiers, qui ont des points sans resume de seance.
+  defp activity?(session, points) do
+    (not is_nil(session) or length(points) > 1) and plausible_duration?(session)
+  end
+
+  defp plausible_duration?(nil), do: true
+
+  defp plausible_duration?(session) do
+    case num(session, "total_elapsed_time") || num(session, "total_timer_time") do
+      nil -> true
+      elapsed -> elapsed <= @max_session_s
+    end
+  end
+
+  defp build_activity(records, session, points, digest) do
     case started_at(session, points) do
       nil ->
         {:error, :no_timestamp}
@@ -150,9 +190,14 @@ defmodule Soleus.Ingest.Fit do
         |> Enum.find(&(&1.kind == "sport"))
         |> value("sport")
 
+    # Repli sur "unknown" et non sur la valeur brute : un export Garmin contient
+    # des sports que cette table ne connait pas ("generic" pour les fichiers
+    # d'accumulation multi-jours, par exemple), et laisser passer la chaine
+    # telle quelle faisait echouer la validation du changeset plus loin. Un
+    # sport non reconnu n'est pas une raison de perdre la seance.
     case raw do
       nil -> "unknown"
-      s -> Map.get(@sports, s, s)
+      sport -> Map.get(@sports, sport, "unknown")
     end
   end
 

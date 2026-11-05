@@ -197,7 +197,11 @@ defmodule Soleus.Analytics do
       cs_ms: cs && cs.cs_ms,
       d_prime_m: cs && cs.d_prime_m,
       r2: cs && cs.r2,
-      sample_count: length(curve),
+      # Le nombre de points sur lesquels **le modele** a ete ajuste, et non la
+      # longueur de la courbe. Les deux different beaucoup : une courbe de 20
+      # paliers n'en a que 8 dans la plage de validite de la vitesse critique,
+      # et afficher 20 a cote d'un R2 donnerait une confiance usurpee.
+      sample_count: (cs && cs.sample_count) || length(curve),
       vdot: vdot_from(predictions),
       endurance_exponent: exponent,
       exponent_source: source,

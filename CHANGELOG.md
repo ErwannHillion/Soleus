@@ -22,6 +22,9 @@ fichier, au format [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 - Tâche `mix soleus.rebuild`
 - Dix checks Credo maison branchés par `.credo.exs`
 
+- Import de masse `mix soleus.import` d'un export RGPD Garmin, et
+  `mix soleus.enrich` pour poser les noms de séance depuis le résumé JSON
+
 ### Fixed
 
 - FC moyenne des efforts records sur les fichiers à enregistrement intelligent :
@@ -33,3 +36,13 @@ fichier, au format [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
   ne peuvent plus se contredire
 - Clés de série déclarées dans `Training.Stream`, pour que le décodage `:safe`
   ne dépende plus de l'ordre de chargement des modules
+- Un sport FIT non reconnu retombe sur `unknown` au lieu de faire échouer
+  l'import sur la validation du changeset
+- Les fichiers d'accumulation multi-jours de Garmin (marqués `generic`, jusqu'à
+  893 km sur 5 jours) sont écartés : ils portent un message `session` valide
+  mais produisaient une charge de plusieurs milliers de points qui écrasait la
+  courbe de forme
+- `sample_count` d'un ajustement compte les points du modèle, pas la longueur
+  de la courbe
+- `startTimeGmt` de l'export Garmin est un flottant, ce qui faisait échouer
+  silencieusement tous les appariements de noms
