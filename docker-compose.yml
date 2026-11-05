@@ -1,0 +1,22 @@
+services:
+  db:
+    image: postgres:17
+    container_name: soleus_db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USR:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DBNAME:-soleus_dev}
+    # 5436 et non 5432 : plusieurs projets du poste ont leur propre Postgres,
+    # et le port par defaut est deja pris ailleurs.
+    ports:
+      - "${POSTGRES_PORT:-5436}:5432"
+    volumes:
+      - soleus_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USR:-postgres}"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  soleus_pgdata:
