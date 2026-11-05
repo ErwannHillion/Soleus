@@ -49,6 +49,9 @@ fichier, au format [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 - Confrontation de la charge chronique de Soleus à celle de Garmin, avec leur
   corrélation
 
+- Fond de carte OpenStreetMap sur le tracé GPS d'une séance, via Leaflet servi
+  localement
+
 ### Fixed
 
 - FC moyenne des efforts records sur les fichiers à enregistrement intelligent :

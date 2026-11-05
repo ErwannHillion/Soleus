@@ -133,49 +133,39 @@ defmodule Soleus.Analytics.Splits do
   end
 
   @doc """
-  Trace GPS ramene dans un repere de `width` x `height`, marges comprises.
+  Coordonnees du trace, reduites pour l'affichage.
 
-  La projection conserve les proportions : une boucle carree doit rester
-  carree. Sans cela, un aller-retour nord-sud serait etire sur toute la
-  largeur et ne ressemblerait plus au parcours.
+  Rend `[[latitude, longitude]]`, la forme attendue par Leaflet. Le
+  reechantillonnage suit la meme logique que les series : un point par seconde
+  sur une heure de course donne 3 600 sommets de polyligne, dont l'immense
+  majorite tombe sur le meme pixel.
+
+  La moyenne glissante lisse au passage le tremblement du GPS, qui est bien
+  visible sur un trace brut en ville.
   """
-  @spec track(map(), number(), number()) :: [{float(), float()}]
-  def track(series, width, height) do
+  @spec coordinates(map(), pos_integer()) :: [[float()]]
+  def coordinates(series, target \\ 600) do
     with lats when is_list(lats) <- series[:lat],
          lons when is_list(lons) <- series[:lon],
-         points = usable(lats, lons),
-         [_, _ | _] <- points do
-      project(points, width, height)
+         pairs = usable(lats, lons),
+         count when count > 1 <- length(pairs) do
+      pairs
+      |> Enum.chunk_every(max(div(count, target), 1))
+      |> Enum.map(&mean_coordinate/1)
+      |> Enum.reject(&is_nil/1)
     else
       _nothing -> []
     end
   end
 
-  defp project(points, width, height) do
-    lats = Enum.map(points, &elem(&1, 0))
-    lons = Enum.map(points, &elem(&1, 1))
+  defp mean_coordinate([]), do: nil
 
-    {lat_min, lat_max} = Enum.min_max(lats)
-    {lon_min, lon_max} = Enum.min_max(lons)
+  defp mean_coordinate(chunk) do
+    n = length(chunk)
 
-    # Un degre de longitude se raccourcit avec la latitude. Sans ce facteur,
-    # un parcours parisien apparaitrait etire d'environ un tiers en largeur.
-    mid_lat = (lat_min + lat_max) / 2
-    lon_scale = :math.cos(mid_lat * :math.pi() / 180)
+    {sum_lat, sum_lon} =
+      Enum.reduce(chunk, {0.0, 0.0}, fn {a, o}, {sa, so} -> {sa + a, so + o} end)
 
-    span_x = max((lon_max - lon_min) * lon_scale, 1.0e-9)
-    span_y = max(lat_max - lat_min, 1.0e-9)
-    scale = min(width / span_x, height / span_y)
-
-    offset_x = (width - span_x * scale) / 2
-    offset_y = (height - span_y * scale) / 2
-
-    Enum.map(points, fn {lat, lon} ->
-      {
-        offset_x + (lon - lon_min) * lon_scale * scale,
-        # L'axe des ordonnees d'un SVG descend, celui des latitudes monte.
-        offset_y + (lat_max - lat) * scale
-      }
-    end)
+    [sum_lat / n, sum_lon / n]
   end
 end

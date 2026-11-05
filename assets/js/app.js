@@ -24,6 +24,7 @@ import {Socket} from "phoenix"
 import {LiveSocket} from "phoenix_live_view"
 import {Brush} from "./brush"
 import {Hover} from "./hover"
+import {TrackMap} from "./track_map"
 import {hooks as colocatedHooks} from "phoenix-colocated/soleus"
 import topbar from "../vendor/topbar"
 
@@ -31,7 +32,7 @@ const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute
 const liveSocket = new LiveSocket("/live", Socket, {
   longPollFallbackMs: 2500,
   params: {_csrf_token: csrfToken},
-  hooks: {Brush, Hover, ...colocatedHooks},
+  hooks: {Brush, Hover, TrackMap, ...colocatedHooks},
 })
 
 // Show progress bar on live navigation and form submits

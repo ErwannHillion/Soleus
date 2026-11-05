@@ -25,7 +25,7 @@ defmodule SoleusWeb.ActivityLive do
      socket
      |> assign(:activity, activity)
      |> assign(:splits, Splits.per_kilometer(series))
-     |> assign(:track, Splits.track(series, 520, 400))
+     |> assign(:track, Splits.coordinates(series))
      |> assign(:speed, Splits.resample(series, :speed_ms))
      |> assign(:hr, Splits.resample(series, :hr))
      |> assign(:altitude, Splits.resample(series, :altitude_m))
@@ -65,7 +65,21 @@ defmodule SoleusWeb.ActivityLive do
           <section class="xl:col-span-4">
             <.panel_head title="Trace" note={gps_note(@track)} />
             <div class="px-5 pb-5">
-              <.track_chart points={@track} class="w-full" />
+              <%!-- `id` stable et `phx-update="ignore"` : Leaflet construit son
+                    propre arbre DOM dans ce noeud, et laisser LiveView le
+                    reconcilier le detruirait a chaque rendu. --%>
+              <div
+                :if={@track != []}
+                id={"track-#{@activity.id}"}
+                phx-hook="TrackMap"
+                phx-update="ignore"
+                data-track={Jason.encode!(@track)}
+                class="h-[26rem] w-full border border-line"
+              >
+              </div>
+              <p :if={@track == []} class="py-8 text-center text-xs text-faint">
+                Aucun point GPS sur cette seance
+              </p>
             </div>
           </section>
 
@@ -255,7 +269,7 @@ defmodule SoleusWeb.ActivityLive do
   end
 
   defp gps_note([]), do: "aucun point GPS"
-  defp gps_note(_points), do: "sans fond de carte"
+  defp gps_note(points), do: "#{length(points)} points · OpenStreetMap"
 
   @months ~w(janvier fevrier mars avril mai juin juillet aout septembre octobre novembre decembre)
 
