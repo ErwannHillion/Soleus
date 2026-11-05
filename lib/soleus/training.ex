@@ -126,15 +126,17 @@ defmodule Soleus.Training do
 
   # -- lecture ----------------------------------------------------------------
 
-  @doc "Les activites les plus recentes, sans leurs series."
-  def list_activities(opts \\ []) do
-    limit = Keyword.get(opts, :limit, 50)
-    sport = Keyword.get(opts, :sport)
+  @doc """
+  Les activites les plus recentes, sans leurs series.
 
+  Options : `:sport` (ou `nil` pour tous), `:since`, `:limit`.
+  """
+  def list_activities(opts \\ []) do
     Activity
     |> order_by(desc: :started_at)
-    |> limit(^limit)
-    |> maybe_sport(sport)
+    |> limit(^Keyword.get(opts, :limit, 50))
+    |> maybe_sport(Keyword.get(opts, :sport))
+    |> maybe_since(Keyword.get(opts, :since))
     |> Repo.all()
   end
 
@@ -224,6 +226,22 @@ defmodule Soleus.Training do
     |> Repo.all()
   end
 
+  @doc """
+  Les sports reellement presents en base, avec leur nombre de seances.
+
+  Sert a construire le filtre de la liste : proposer « natation » a quelqu'un
+  qui n'a jamais nage est une case qui ne renverra jamais rien.
+  """
+  @spec sports_present() :: [{String.t(), non_neg_integer()}]
+  def sports_present do
+    Repo.all(
+      from a in Activity,
+        group_by: a.sport,
+        order_by: [desc: count(a.id)],
+        select: {a.sport, count(a.id)}
+    )
+  end
+
   @doc "La date de la premiere activite connue, ou nil si la base est vide."
   def first_activity_date do
     Repo.one(from a in Activity, select: min(a.local_date))
@@ -242,6 +260,9 @@ defmodule Soleus.Training do
 
   defp maybe_sport(query, nil), do: query
   defp maybe_sport(query, sport), do: where(query, [a], a.sport == ^sport)
+
+  defp maybe_since(query, nil), do: query
+  defp maybe_since(query, %Date{} = since), do: where(query, [a], a.local_date >= ^since)
 
   # -- athlete ----------------------------------------------------------------
 

@@ -90,6 +90,22 @@ La cle expire au bout d'un an au plus et Garmin n'emet **pas** de jeton de
 rafraichissement : le jour ou elle expire, la synchronisation s'arrete avec un
 message explicite et il faut en regenerer une a la main.
 
+### Donnees de sante
+
+L'export contient bien plus que les seances. Un import separe les reprend :
+
+```sh
+mix soleus.wellness ~/Documents/data_garmin/DI_CONNECT
+```
+
+Sommeil et ses phases, variabilite cardiaque, frequence au repos,
+respiration, SpO2, temperature cutanee, stress, reserve d'energie, pas,
+VO2max, etat de forme, charge aigue et chronique de Garmin — avec, pour
+plusieurs d'entre elles, les **lignes de base personnelles** que Garmin
+etablit sur l'historique de l'athlete. Ce sont elles qui rendent la page
+`Corps` lisible : une valeur situee dans *sa* normale, pas dans une norme
+generale.
+
 ## Reconstruire les donnees derivees
 
 ```sh

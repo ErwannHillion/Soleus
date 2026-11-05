@@ -606,22 +606,25 @@ defmodule Soleus.Analytics do
   un `mount` rendrait impossible de voir ce que coute l'affichage, et la vue
   n'a pas a connaitre la forme du schema.
   """
-  @spec dashboard(String.t()) :: map()
-  def dashboard(sport \\ "run") do
+  @spec dashboard(String.t(), keyword()) :: map()
+  def dashboard(sport \\ "run", opts \\ []) do
     today = Date.utc_today()
     fit = current_fit(sport)
+    days = Keyword.get(opts, :days, 180)
 
     %{
       sport: sport,
       today: today,
+      period_days: days,
       form: current_form(),
-      load_days: load_series(180),
+      load_days: load_series(days),
       fit: fit,
       cs: cs_of(fit),
       fits: fit_history(sport, 365),
       curve: Training.best_effort_curve(sport, Date.add(today, -@fit_window_days), today),
       bests: Training.personal_bests(sport),
       recent: Training.list_activities(sport: sport, limit: 40),
+      sports: Training.sports_present(),
       goals: next_goals(sport),
       weeks: week_summary(),
       paces: fit && fit.vdot && Vdot.training_speeds(fit.vdot)

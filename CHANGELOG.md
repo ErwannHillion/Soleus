@@ -29,6 +29,15 @@ fichier, au format [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
   renouvellement avant échéance, recherche d'activités, téléchargement du
   fichier d'origine, synchronisation Oban quotidienne et `mix soleus.garmin`
 
+- Import des données de santé quotidiennes (`mix soleus.wellness`) : sommeil,
+  HRV, FC au repos, respiration, stress, réserve d'énergie, pas, VO2max,
+  charge Garmin — 512 jours, avec les lignes de base personnelles
+- Page `Corps` : schéma corporel dont chaque région porte l'état d'un système,
+  cartes par mesure, comparaison à la période précédente
+- Sélection de période (30 j à tout) et **sélection d'une zone au curseur** sur
+  le graphique de charge
+- Filtre par sport sur la liste des séances
+
 ### Fixed
 
 - FC moyenne des efforts records sur les fichiers à enregistrement intelligent :
@@ -50,3 +59,10 @@ fichier, au format [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
   de la courbe
 - `startTimeGmt` de l'export Garmin est un flottant, ce qui faisait échouer
   silencieusement tous les appariements de noms
+- `calendarDate` est un entier en millisecondes dans trois familles de
+  l'export Garmin et une chaîne ISO dans les autres : les charges aiguës,
+  scores d'endurance et scores en côte n'étaient silencieusement jamais
+  importés
+- L'état de santé se reconstitue sur une fenêtre de quatorze jours plutôt que
+  sur la seule dernière ligne : toutes les mesures n'arrivent pas le même jour,
+  et la charge d'entraînement du jour affichait un tiret

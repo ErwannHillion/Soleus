@@ -10,19 +10,101 @@ defmodule SoleusWeb.DashboardLive do
   use SoleusWeb, :live_view
 
   import SoleusWeb.Charts
+  import SoleusWeb.BodyFigure
   import SoleusWeb.Dock
 
   alias Soleus.Analytics
   alias Soleus.Analytics.{Decoupling, Load, Pace}
+  alias Soleus.Health
+  alias Soleus.Training
+
+  # Les periodes proposees, en jours. « Tout » vaut `nil` : la borne est alors
+  # la premiere donnee connue, qui n'est pas la meme pour les seances et pour
+  # les mesures de sante.
+  @periods [{"30 j", 30}, {"90 j", 90}, {"6 mois", 182}, {"1 an", 365}, {"Tout", nil}]
 
   @impl true
   def mount(_params, _session, socket) do
-    {:ok, assign(socket, Analytics.dashboard("run"))}
+    {:ok,
+     socket
+     |> assign(period: 180, sport_filter: "run", selection: nil)
+     |> load_data()}
   end
 
   @impl true
-  def handle_params(_params, _uri, socket) do
-    {:noreply, socket}
+  def handle_params(_params, _uri, socket), do: {:noreply, socket}
+
+  @impl true
+  def handle_event("set_period", %{"days" => raw}, socket) do
+    {:noreply,
+     socket
+     |> assign(period: parse_period(raw), selection: nil)
+     |> load_data()}
+  end
+
+  # Zone tracee au curseur sur le graphique de charge. Elle prend le pas sur
+  # la periode choisie aux boutons, jusqu'a ce qu'on en rechoisisse une.
+  def handle_event("select_range", %{"from" => from, "to" => to}, socket) do
+    with {:ok, from} <- Date.from_iso8601(from),
+         {:ok, to} <- Date.from_iso8601(to),
+         # Moins de sept jours, le graphe de charge n'a plus rien a montrer :
+         # la charge chronique est une moyenne sur six semaines.
+         true <- Date.diff(to, from) >= 7 do
+      {:noreply, socket |> assign(selection: {from, to}) |> load_data()}
+    else
+      _too_small -> {:noreply, socket}
+    end
+  end
+
+  def handle_event("clear_selection", _params, socket) do
+    {:noreply, socket |> assign(selection: nil) |> load_data()}
+  end
+
+  def handle_event("set_sport", %{"sport" => raw}, socket) do
+    sport = if raw in ["", "all"], do: nil, else: raw
+    {:noreply, socket |> assign(sport_filter: sport) |> load_data()}
+  end
+
+  defp parse_period("all"), do: nil
+
+  defp parse_period(raw) do
+    case Integer.parse(raw) do
+      {days, ""} when days > 0 -> days
+      _invalid -> 180
+    end
+  end
+
+  # Une seule fonction de chargement, appelee au montage et apres chaque
+  # changement de filtre. La page est un instrument de lecture : recharger
+  # l'ensemble coute moins cher a maintenir qu'un etat partiel a invalider.
+  defp load_data(socket) do
+    sport = socket.assigns.sport_filter || "run"
+    today = Date.utc_today()
+
+    {since, until} =
+      case socket.assigns.selection do
+        {from, to} -> {from, to}
+        nil -> {Date.add(today, -(socket.assigns.period || 3650)), today}
+      end
+
+    days = max(Date.diff(until, since), 1)
+
+    socket
+    |> assign(Analytics.dashboard(sport, days: Date.diff(today, since)))
+    |> assign(:sport_filter, socket.assigns.sport_filter)
+    |> assign(:period, socket.assigns.period)
+    |> assign(:since, since)
+    |> assign(:until, until)
+    |> then(&assign(&1, :load_days, clamp_days(&1.assigns.load_days, since, until)))
+    |> assign(:wellness, Health.range(since, until))
+    |> assign(:health_snapshot, Health.snapshot())
+    |> assign(:today_health, Health.latest())
+    |> assign(:health_averages, Health.averages(since, until))
+    |> assign(:previous_averages, Health.averages(Date.add(since, -days), since))
+    |> assign(
+      :sessions,
+      Training.list_activities(sport: socket.assigns.sport_filter, since: since, limit: 200)
+    )
   end
 
   @impl true
@@ -38,9 +120,10 @@ defmodule SoleusWeb.DashboardLive do
           <span class="label">{view_label(@live_action)}</span>
         </div>
 
-        <div class="flex items-baseline gap-6">
+        <div class="flex items-center gap-5">
           <.week_stat label="cette semaine" week={@weeks.current} />
           <.week_stat label="precedente" week={@weeks.previous} muted />
+          <.period_picker current={@period} />
           <span class="num text-[11px] text-faint">{format_date(@today)}</span>
         </div>
       </header>
@@ -51,6 +134,7 @@ defmodule SoleusWeb.DashboardLive do
         <.view_form :if={@live_action == :form} {assigns} />
         <.view_sessions :if={@live_action == :sessions} {assigns} />
         <.view_curve :if={@live_action == :curve} {assigns} />
+        <.view_body :if={@live_action == :body} {assigns} />
         <.view_predictions :if={@live_action == :predictions} {assigns} />
       </main>
 
@@ -65,7 +149,7 @@ defmodule SoleusWeb.DashboardLive do
     ~H"""
     <div class="flex min-h-full flex-col divide-y divide-line">
       <.form_row form={@form} days={@load_days} />
-      <.load_row days={@load_days} />
+      <.load_row days={@load_days} since={@since} until={@until} selection={@selection} />
       <div class="flex-1">
         <.recent_panel activities={Enum.take(@recent, 8)} title="Dernieres seances" />
       </div>
@@ -76,7 +160,274 @@ defmodule SoleusWeb.DashboardLive do
   defp view_sessions(assigns) do
     ~H"""
     <div class="min-h-full">
-      <.recent_panel activities={@recent} title="Seances" />
+      <.sport_picker current={@sport_filter} sports={@sports} />
+      <.recent_panel activities={@sessions} title="Seances" />
+    </div>
+    """
+  end
+
+  # -- vue Corps ---------------------------------------------------------------
+
+  defp view_body(assigns) do
+    {snapshot, as_of} =
+      case assigns.health_snapshot do
+        {snapshot, as_of} -> {snapshot, as_of}
+        nil -> {nil, nil}
+      end
+
+    assigns =
+      assigns
+      |> assign(:systems, Health.systems(snapshot))
+      |> assign(:snapshot, snapshot)
+      |> assign(:as_of, as_of)
+
+    ~H"""
+    <div class="flex min-h-full flex-col divide-y divide-line">
+      <div class="grid grid-cols-1 divide-y divide-line xl:grid-cols-12 xl:divide-x xl:divide-y-0">
+        <section class="xl:col-span-4">
+          <.panel_head
+            title="Etat general"
+            note={@as_of && format_date(@as_of)}
+          />
+          <div class="flex justify-center px-5 pb-6">
+            <.body_figure systems={@systems} class="max-h-[58vh] w-auto" />
+          </div>
+          <p class="px-5 pb-5 text-[11px] leading-relaxed text-faint">
+            Chaque region prend l'etat le plus degrade des mesures qui s'y
+            rattachent. Les seuils viennent des lignes de base que Garmin etablit
+            sur ton propre historique, pas de normes generales.
+          </p>
+        </section>
+
+        <section class="xl:col-span-8">
+          <.panel_head title="Systemes" note={"#{length(@systems)} mesures"} />
+          <div class="grid grid-cols-1 gap-px border-t border-line bg-line sm:grid-cols-2 2xl:grid-cols-3">
+            <.system_card :for={system <- @systems} system={system} />
+          </div>
+
+          <.comparison current={@health_averages} previous={@previous_averages} days={@period} />
+        </section>
+      </div>
+
+      <div class="grid flex-1 grid-cols-1 divide-y divide-line xl:grid-cols-2 xl:divide-x xl:divide-y-0">
+        <.wellness_panel
+          title="Variabilite cardiaque"
+          note="nocturne, avec ta fourchette normale"
+          points={wellness_points(@wellness, :hrv_overnight)}
+          baseline={baseline(@snapshot, :hrv_baseline_low, :hrv_baseline_high)}
+          color="var(--color-signal)"
+        />
+        <.wellness_panel
+          title="Frequence au repos"
+          note="plus bas, mieux c'est"
+          points={wellness_points(@wellness, :resting_hr)}
+          baseline={baseline(@snapshot, :hr_baseline_low, :hr_baseline_high)}
+          color="var(--color-alert)"
+        />
+        <.wellness_panel
+          title="Sommeil"
+          note="heures par nuit"
+          points={wellness_points(@wellness, :sleep_total_s, &(&1 / 3600))}
+          color="var(--color-form)"
+        />
+        <.wellness_panel
+          title="Reserve d'energie"
+          note="pic quotidien"
+          points={wellness_points(@wellness, :body_battery_high)}
+          color="var(--color-fatigue)"
+        />
+      </div>
+    </div>
+    """
+  end
+
+  attr :system, :map, required: true
+
+  defp system_card(assigns) do
+    ~H"""
+    <article class="row-hover bg-ink px-5 py-4">
+      <div class="flex items-baseline justify-between">
+        <span class="label">{@system.label}</span>
+        <span class="flex items-center gap-1.5">
+          <span
+            class="h-1.5 w-1.5 rounded-full"
+            style={"background-color: #{status_color(@system.status)}"}
+          ></span>
+          <span class="text-[10px] text-faint">{status_label(@system.status)}</span>
+        </span>
+      </div>
+      <div class="num mt-1.5 text-2xl leading-none text-text">{@system.value}</div>
+      <div class="mt-1.5 text-[11px] text-faint">{@system.detail}</div>
+    </article>
+    """
+  end
+
+  attr :title, :string, required: true
+  attr :note, :string, default: nil
+  attr :points, :list, required: true
+  attr :baseline, :any, default: nil
+  attr :color, :string, default: "var(--color-signal)"
+
+  defp wellness_panel(assigns) do
+    ~H"""
+    <section>
+      <.panel_head title={@title} note={@note} />
+      <div class="px-5 pb-5">
+        <.daily_chart points={@points} baseline={@baseline} color={@color} class="w-full" />
+      </div>
+    </section>
+    """
+  end
+
+  attr :current, :map, required: true
+  attr :previous, :map, required: true
+  attr :days, :any, required: true
+
+  # La comparaison a la periode precedente de meme longueur. C'est ce qui
+  # transforme une moyenne en information : 7 h 12 de sommeil ne dit rien,
+  # « 7 h 12, soit vingt minutes de moins que le mois d'avant » si.
+  defp comparison(assigns) do
+    ~H"""
+    <div class="border-t border-line">
+      <.panel_head
+        title="Comparaison"
+        note={"#{@days || "tout"} j contre la periode precedente"}
+      />
+      <dl class="grid grid-cols-2 gap-x-5 gap-y-4 px-5 pb-5 lg:grid-cols-4">
+        <.delta
+          label="sommeil"
+          current={@current[:sleep_total_s]}
+          previous={@previous[:sleep_total_s]}
+          format={:duration}
+        />
+        <.delta
+          label="variabilite cardiaque"
+          current={@current[:hrv_overnight]}
+          previous={@previous[:hrv_overnight]}
+          unit=" ms"
+        />
+        <.delta
+          label="FC au repos"
+          current={@current[:resting_hr]}
+          previous={@previous[:resting_hr]}
+          unit=" bpm"
+          lower_is_better
+        />
+        <.delta
+          label="stress moyen"
+          current={@current[:stress_avg]}
+          previous={@previous[:stress_avg]}
+          lower_is_better
+        />
+        <.delta
+          label="score de sommeil"
+          current={@current[:sleep_score]}
+          previous={@previous[:sleep_score]}
+        />
+        <.delta
+          label="reserve d'energie"
+          current={@current[:body_battery_high]}
+          previous={@previous[:body_battery_high]}
+        />
+        <.delta
+          label="etat de forme"
+          current={@current[:training_readiness]}
+          previous={@previous[:training_readiness]}
+        />
+        <.delta label="pas par jour" current={@current[:steps]} previous={@previous[:steps]} />
+      </dl>
+    </div>
+    """
+  end
+
+  attr :label, :string, required: true
+  attr :current, :any, default: nil
+  attr :previous, :any, default: nil
+  attr :unit, :string, default: ""
+  attr :format, :atom, default: :number
+  attr :lower_is_better, :boolean, default: false
+
+  defp delta(assigns) do
+    change =
+      if is_number(assigns.current) and is_number(assigns.previous),
+        do: assigns.current - assigns.previous
+
+    improving? =
+      is_number(change) and
+        ((assigns.lower_is_better and change < 0) or (not assigns.lower_is_better and change > 0))
+
+    assigns = assign(assigns, change: change, improving?: improving?)
+
+    ~H"""
+    <div>
+      <dt class="label">{@label}</dt>
+      <dd class="num mt-1 text-lg leading-none text-text">
+        {measure(@current, @format, @unit)}
+      </dd>
+      <dd
+        :if={is_number(@change)}
+        class="num mt-1 text-[11px]"
+        style={"color: #{if @improving?, do: "var(--color-form)", else: "var(--color-fatigue)"}"}
+      >
+        {signed_measure(@change, @format, @unit)}
+      </dd>
+      <dd :if={is_nil(@change)} class="mt-1 text-[11px] text-faint">pas de comparaison</dd>
+    </div>
+    """
+  end
+
+  attr :current, :any, required: true
+
+  defp period_picker(assigns) do
+    assigns = assign(assigns, :periods, @periods)
+
+    ~H"""
+    <div class="flex items-center gap-px border border-line">
+      <button
+        :for={{label, days} <- @periods}
+        type="button"
+        phx-click="set_period"
+        phx-value-days={days || "all"}
+        class={[
+          "px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.08em] transition-colors",
+          if(@current == days, do: "bg-signal-wash text-signal", else: "text-faint hover:text-text")
+        ]}
+      >
+        {label}
+      </button>
+    </div>
+    """
+  end
+
+  attr :current, :any, required: true
+  attr :sports, :list, required: true
+
+  defp sport_picker(assigns) do
+    ~H"""
+    <div class="flex items-center gap-px border-b border-line px-5 py-2.5">
+      <button
+        type="button"
+        phx-click="set_sport"
+        phx-value-sport="all"
+        class={[
+          "px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.08em] transition-colors",
+          if(is_nil(@current), do: "bg-signal-wash text-signal", else: "text-faint hover:text-text")
+        ]}
+      >
+        Tous
+      </button>
+      <button
+        :for={{sport, count} <- @sports}
+        type="button"
+        phx-click="set_sport"
+        phx-value-sport={sport}
+        class={[
+          "px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.08em] transition-colors",
+          if(@current == sport, do: "bg-signal-wash text-signal", else: "text-faint hover:text-text")
+        ]}
+      >
+        {sport_label(sport)} <span class="num opacity-60">{count}</span>
+      </button>
     </div>
     """
   end
@@ -141,6 +492,7 @@ defmodule SoleusWeb.DashboardLive do
   defp view_label(:form), do: "forme"
   defp view_label(:sessions), do: "seances"
   defp view_label(:curve), do: "courbe vitesse-duree"
+  defp view_label(:body), do: "corps"
   defp view_label(:predictions), do: "predictions"
 
   # -- bandeau de forme -------------------------------------------------------
@@ -185,16 +537,46 @@ defmodule SoleusWeb.DashboardLive do
   end
 
   attr :days, :list, required: true
+  attr :since, Date, required: true
+  attr :until, Date, required: true
+  attr :selection, :any, default: nil
 
   defp load_row(assigns) do
     ~H"""
     <section>
-      <.panel_head title="Charge et forme" note="180 jours" />
+      <.panel_head title="Charge et forme" note={range_note(@since, @until, @selection)} />
       <div class="px-5 pb-5">
-        <.load_chart days={@days} class="w-full" />
-        <.form_strip days={@days} class="mt-1 w-full" />
+        <%!-- Le glisser sur cette zone definit une plage de dates. Le hook ne
+              fait que suivre le pointeur et convertir en dates ; tout le
+              redessin reste cote serveur. --%>
+        <div
+          id="load-brush"
+          phx-hook="Brush"
+          data-from={Date.to_iso8601(@since)}
+          data-to={Date.to_iso8601(@until)}
+          class="relative cursor-crosshair select-none touch-none"
+        >
+          <div
+            data-brush-overlay
+            class="pointer-events-none absolute inset-y-0 hidden bg-signal/20 ring-1 ring-signal/50"
+          >
+          </div>
+          <.load_chart days={@days} class="w-full" />
+          <.form_strip days={@days} class="mt-1 w-full" />
+        </div>
 
         <div class="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1">
+          <button
+            :if={@selection}
+            type="button"
+            phx-click="clear_selection"
+            class="chip chip-signal cursor-pointer"
+          >
+            zone selectionnee — effacer
+          </button>
+          <span :if={is_nil(@selection)} class="text-[10px] text-faint">
+            glisser sur le graphique pour isoler une periode
+          </span>
           <.legend color="var(--color-signal)" label="charge chronique" />
           <.legend color="var(--color-fatigue)" label="charge aigue" />
           <.legend color="var(--color-signal)" label="charge du jour" faded />
@@ -519,6 +901,80 @@ defmodule SoleusWeb.DashboardLive do
     </span>
     """
   end
+
+  # `Analytics.dashboard/2` ne sait que remonter depuis aujourd'hui. Une zone
+  # qui se termine avant aujourd'hui doit donc etre recoupee ici, sinon le
+  # graphe deborderait a droite de ce qui a ete selectionne.
+  @months_short ~w(janv. fevr. mars avr. mai juin juil. aout sept. oct. nov. dec.)
+
+  defp range_note(since, until, nil), do: "#{Date.diff(until, since)} jours"
+
+  defp range_note(since, until, _selection) do
+    "#{short_date(since)} → #{short_date(until)}"
+  end
+
+  defp short_date(date), do: "#{date.day} #{Enum.at(@months_short, date.month - 1)} #{date.year}"
+
+  defp clamp_days(days, since, until) do
+    Enum.filter(
+      days,
+      &(Date.compare(&1.date, since) != :lt and Date.compare(&1.date, until) != :gt)
+    )
+  end
+
+  # -- extraction des mesures --------------------------------------------------
+
+  # Les jours non mesures sont ecartes plutot que ramenes a zero : une nuit
+  # sans la montre doit laisser un trou dans la courbe, pas une chute.
+  defp wellness_points(days, field, transform \\ & &1) do
+    days
+    |> Enum.map(&{&1.date, Map.get(&1, field)})
+    |> Enum.reject(fn {_date, value} -> is_nil(value) end)
+    |> Enum.map(fn {date, value} -> {date, transform.(value)} end)
+  end
+
+  # La fourchette normale du jour le plus recent sert de reference a toute la
+  # periode. Elle derive lentement, et afficher une bande par jour rendrait le
+  # graphe illisible pour un gain nul.
+  defp baseline(nil, _low_field, _high_field), do: nil
+
+  defp baseline(day, low_field, high_field) do
+    case {Map.get(day, low_field), Map.get(day, high_field)} do
+      {low, high} when is_number(low) and is_number(high) -> {low, high}
+      _missing -> nil
+    end
+  end
+
+  defp measure(nil, _format, _unit), do: "—"
+  # Heures et minutes, et non `h:mm:ss` : les secondes d'une moyenne de
+  # sommeil sur six mois n'apportent rien et encombrent la lecture.
+  defp measure(value, :duration, _unit) do
+    total = round(value)
+
+    "#{div(total, 3600)} h #{total |> rem(3600) |> div(60) |> to_string() |> String.pad_leading(2, "0")}"
+  end
+
+  defp measure(value, _format, unit), do: number(value, 1) <> unit
+
+  defp signed_measure(value, :duration, _unit) do
+    total = abs(round(value))
+    sign = if value >= 0, do: "+", else: "−"
+    "#{sign}#{div(total, 60)} min"
+  end
+
+  defp signed_measure(value, _format, unit), do: signed(value, 1) <> unit
+
+  @sport_labels %{
+    "run" => "Course",
+    "ride" => "Velo",
+    "swim" => "Natation",
+    "walk" => "Marche",
+    "hike" => "Rando",
+    "strength" => "Renfo",
+    "unknown" => "Autre"
+  }
+
+  defp sport_label(sport), do: Map.get(@sport_labels, sport, sport)
 
   # -- mise en forme ----------------------------------------------------------
 

@@ -20,6 +20,7 @@ defmodule SoleusWeb.Router do
     live "/", DashboardLive, :form
     live "/seances", DashboardLive, :sessions
     live "/courbe", DashboardLive, :curve
+    live "/corps", DashboardLive, :body
     live "/predictions", DashboardLive, :predictions
   end
 

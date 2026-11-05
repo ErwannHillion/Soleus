@@ -472,6 +472,173 @@ defmodule SoleusWeb.Charts do
     end
   end
 
+  # -- mesure quotidienne -----------------------------------------------------
+
+  attr :points, :list, required: true, doc: "liste de `{date, valeur}`, triee"
+  attr :baseline, :any, default: nil, doc: "`{bas, haut}` de la fourchette personnelle"
+  attr :color, :string, default: "var(--color-signal)"
+  attr :width, :integer, default: 680
+  attr :height, :integer, default: 150
+  attr :invert, :boolean, default: false, doc: "vers le bas, c'est mieux (FC au repos, stress)"
+  attr :class, :string, default: nil
+
+  @doc """
+  Serie d'une mesure quotidienne, avec sa fourchette personnelle en fond.
+
+  La bande de normale est ce qui rend la courbe lisible : une variabilite
+  cardiaque a 78 ms ne dit rien seule, mais voir qu'elle flotte au milieu
+  d'une fourchette 61-104 dit tout en un coup d'oeil.
+
+  Les trous ne sont pas combles. Une nuit sans la montre doit laisser une
+  interruption, pas un segment qui relie deux semaines et laisse croire a une
+  mesure continue.
+  """
+  def daily_chart(assigns) do
+    points = assigns.points
+
+    if length(points) < 2 do
+      empty_chart(assigns)
+    else
+      pad_left = 44
+      pad_right = 12
+      pad_top = 10
+      pad_bottom = 18
+
+      values = Enum.map(points, &elem(&1, 1))
+      {lo, hi} = domain(values, assigns.baseline)
+      first = points |> List.first() |> elem(0)
+      span = max(Date.diff(points |> List.last() |> elem(0), first), 1)
+
+      x = fn date ->
+        scale(Date.diff(date, first), {0, span}, {pad_left, assigns.width - pad_right})
+      end
+
+      y = fn value -> scale(value, {lo, hi}, {assigns.height - pad_bottom, pad_top}) end
+
+      assigns =
+        assigns
+        |> assign(:segments, segments(points, x, y))
+        |> assign(:band, band(assigns.baseline, y, pad_left, assigns.width - pad_right))
+        |> assign(:ticks, value_ticks(lo, hi, y))
+        |> assign(:last, last_point(points, x, y))
+        |> assign(:empty, false)
+
+      ~H"""
+      <svg
+        viewBox={"0 0 #{@width} #{@height}"}
+        class={@class}
+        style={aspect(@width, @height)}
+        role="img"
+      >
+        <g>
+          <line
+            :for={{_label, py} <- @ticks}
+            x1={44}
+            x2={@width - 12}
+            y1={py}
+            y2={py}
+            stroke="var(--color-line)"
+            stroke-width="1"
+          />
+          <text
+            :for={{label, py} <- @ticks}
+            x="38"
+            y={py + 3}
+            text-anchor="end"
+            fill="var(--color-faint)"
+            font-size="9"
+            font-family="var(--font-mono)"
+          >
+            {label}
+          </text>
+        </g>
+
+        <rect
+          :if={@band}
+          x={elem(@band, 0)}
+          y={elem(@band, 1)}
+          width={elem(@band, 2)}
+          height={elem(@band, 3)}
+          fill="var(--color-form)"
+          opacity="0.09"
+        />
+
+        <path :for={segment <- @segments} d={segment} fill="none" stroke={@color} stroke-width="1.6" />
+
+        <circle :if={@last} cx={elem(@last, 0)} cy={elem(@last, 1)} r="2.6" fill={@color} />
+      </svg>
+      """
+    end
+  end
+
+  # Les trous de plus d'une semaine coupent le trait. En deca, relier reste
+  # honnete — ces mesures evoluent lentement — et evite une courbe hachee par
+  # chaque nuit sans la montre.
+  @max_gap_days 7
+
+  defp segments(points, x, y) do
+    points
+    |> Enum.chunk_while([], &accumulate/2, &flush/1)
+    |> Enum.reject(&(length(&1) < 2))
+    |> Enum.map(fn run -> run |> Enum.map(fn {d, v} -> {x.(d), y.(v)} end) |> to_path() end)
+  end
+
+  defp accumulate({date, _value} = point, [{previous, _} | _] = acc) do
+    if Date.diff(date, previous) > @max_gap_days do
+      {:cont, Enum.reverse(acc), [point]}
+    else
+      {:cont, [point | acc]}
+    end
+  end
+
+  defp accumulate(point, acc), do: {:cont, [point | acc]}
+
+  defp flush([]), do: {:cont, []}
+  defp flush(acc), do: {:cont, Enum.reverse(acc), []}
+
+  # Le domaine englobe la fourchette personnelle meme quand les valeurs n'y
+  # vont pas : sans cela la bande de normale sortirait du cadre et la courbe
+  # paraitrait centree alors qu'elle est en bord de fourchette.
+  defp domain(values, baseline) do
+    candidates =
+      case baseline do
+        {low, high} when is_number(low) and is_number(high) -> values ++ [low, high]
+        _none -> values
+      end
+
+    lo = Enum.min(candidates)
+    hi = Enum.max(candidates)
+    margin = max((hi - lo) * 0.12, abs(hi) * 0.02 + 0.5)
+
+    {lo - margin, hi + margin}
+  end
+
+  defp band(nil, _y, _x0, _x1), do: nil
+
+  defp band({low, high}, y, x0, x1) when is_number(low) and is_number(high) do
+    top = y.(high)
+    bottom = y.(low)
+    {x0, top, x1 - x0, max(bottom - top, 1)}
+  end
+
+  defp band(_baseline, _y, _x0, _x1), do: nil
+
+  defp value_ticks(lo, hi, y) do
+    Enum.map([0.15, 0.5, 0.85], fn fraction ->
+      value = lo + (hi - lo) * fraction
+      {format_tick(value), y.(value)}
+    end)
+  end
+
+  defp format_tick(value) when abs(value) >= 100, do: value |> round() |> Integer.to_string()
+  defp format_tick(value) when abs(value) >= 10, do: value |> round() |> Integer.to_string()
+  defp format_tick(value), do: value |> Float.round(1) |> to_string()
+
+  defp last_point(points, x, y) do
+    {date, value} = List.last(points)
+    {x.(date), y.(value)}
+  end
+
   # -- primitives -------------------------------------------------------------
 
   defp empty_chart(assigns) do

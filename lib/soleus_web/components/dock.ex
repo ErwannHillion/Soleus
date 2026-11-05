@@ -21,6 +21,7 @@ defmodule SoleusWeb.Dock do
     %{action: :form, path: "/", icon: "hero-bolt", label: "Forme"},
     %{action: :sessions, path: "/seances", icon: "hero-queue-list", label: "Seances"},
     %{action: :curve, path: "/courbe", icon: "hero-presentation-chart-line", label: "Courbe"},
+    %{action: :body, path: "/corps", icon: "hero-heart", label: "Corps"},
     %{action: :predictions, path: "/predictions", icon: "hero-flag", label: "Predictions"}
   ]
 
