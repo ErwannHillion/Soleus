@@ -12,9 +12,23 @@ defmodule SoleusWeb.Charts do
   faudra un `canvas` pilote par un hook. Ce module s'arrete avant cette
   frontiere.
 
-  Tous les graphes dessinent dans un `viewBox` en coordonnees logiques et se
-  mettent a l'echelle par CSS. Les tailles de police sont donc exprimees dans
-  le repere du `viewBox`, pas en pixels ecran.
+  Tous les graphes dessinent dans un `viewBox` en coordonnees logiques, et
+  imposent son rapport d'aspect en CSS plutot que d'autoriser l'etirement
+  libre. La nuance compte : avec `preserveAspectRatio="none"`, un graphe de
+  1000 x 200 affiche sur 1600 pixels de large etire tout d'un facteur 1,6
+  horizontalement — les traits comme les libelles d'axe, qui deviennent baveux
+  et trop larges. En fixant `aspect-ratio`, la hauteur suit la largeur et le
+  texte reste a ses proportions.
+
+  Les tailles de police sont donc exprimees dans le repere du `viewBox`, pas en
+  pixels ecran : un graphe plus large est aussi plus haut, et son texte grandit
+  proportionnellement.
+
+  C'est pourquoi `width` est un attribut et non une constante. L'echelle de
+  rendu vaut `largeur_reelle / width` : un graphe place dans une colonne de
+  700 pixels mais dessine dans un `viewBox` de 1000 voit son texte reduit d'un
+  tiers, et les libelles d'axe tombent sous six pixels. Caler `width` sur la
+  largeur de rendu attendue garde les polices a leur taille nominale.
   """
 
   use Phoenix.Component
@@ -47,7 +61,8 @@ defmodule SoleusWeb.Charts do
   # -- charge et forme --------------------------------------------------------
 
   attr :days, :list, required: true, doc: "lignes de `Soleus.Analytics.DailyLoad` triees"
-  attr :height, :integer, default: 200
+  attr :width, :integer, default: 1400
+  attr :height, :integer, default: 350
   attr :class, :string, default: nil
 
   @doc """
@@ -59,7 +74,7 @@ defmodule SoleusWeb.Charts do
   la tendance illisible, qui est pourtant la seule chose qu'on vient chercher.
   """
   def load_chart(assigns) do
-    width = 1000
+    width = assigns.width
     pad_left = 42
     pad_right = 12
     pad_top = 14
@@ -83,7 +98,6 @@ defmodule SoleusWeb.Charts do
 
     assigns =
       assigns
-      |> assign(:width, width)
       |> assign(:bar_width, max((width - pad_left - pad_right) / n * 0.6, 0.7))
       |> assign(
         :bars,
@@ -98,7 +112,12 @@ defmodule SoleusWeb.Charts do
       |> assign(:baseline, y.(0.0))
 
     ~H"""
-    <svg viewBox={"0 0 #{@width} #{@height}"} class={@class} preserveAspectRatio="none" role="img">
+    <svg
+      viewBox={"0 0 #{@width} #{@height}"}
+      class={@class}
+      style={aspect(@width, @height)}
+      role="img"
+    >
       <title>Charge chronique et charge aigue</title>
 
       <g>
@@ -159,7 +178,8 @@ defmodule SoleusWeb.Charts do
   # -- forme du jour ----------------------------------------------------------
 
   attr :days, :list, required: true
-  attr :height, :integer, default: 64
+  attr :width, :integer, default: 1400
+  attr :height, :integer, default: 100
   attr :class, :string, default: nil
 
   @doc """
@@ -170,7 +190,7 @@ defmodule SoleusWeb.Charts do
   quoi que ce soit, pour une grandeur dont seul le signe importe vraiment.
   """
   def form_strip(assigns) do
-    width = 1000
+    width = assigns.width
     pad_left = 42
     pad_right = 12
 
@@ -188,7 +208,6 @@ defmodule SoleusWeb.Charts do
 
     assigns =
       assigns
-      |> assign(:width, width)
       |> assign(:zero, y.(0.0))
       |> assign(:bar_width, max((width - pad_left - pad_right) / n * 0.8, 0.8))
       |> assign(:points, Enum.with_index(days))
@@ -196,7 +215,12 @@ defmodule SoleusWeb.Charts do
       |> assign(:y, y)
 
     ~H"""
-    <svg viewBox={"0 0 #{@width} #{@height}"} class={@class} preserveAspectRatio="none" role="img">
+    <svg
+      viewBox={"0 0 #{@width} #{@height}"}
+      class={@class}
+      style={aspect(@width, @height)}
+      role="img"
+    >
       <title>Forme du jour</title>
 
       <line
@@ -228,7 +252,8 @@ defmodule SoleusWeb.Charts do
     doc: "meilleurs efforts, avec `:duration_s` et `:speed_ms`"
 
   attr :cs, :any, default: nil, doc: "ajustement de vitesse critique, pour tracer le modele"
-  attr :height, :integer, default: 240
+  attr :width, :integer, default: 950
+  attr :height, :integer, default: 420
   attr :class, :string, default: nil
 
   @doc """
@@ -240,7 +265,7 @@ defmodule SoleusWeb.Charts do
   qu'une extrapolation reste une extrapolation.
   """
   def curve_chart(assigns) do
-    width = 1000
+    width = assigns.width
     pad_left = 52
     pad_right = 14
     pad_top = 12
@@ -264,7 +289,6 @@ defmodule SoleusWeb.Charts do
 
       assigns =
         assigns
-        |> assign(:width, width)
         |> assign(:points, Enum.map(efforts, &{x.(&1.duration_s), y.(&1.speed_ms), &1}))
         |> assign(:valid_path, valid_path)
         |> assign(:extrapolated_path, extrapolated_path)
@@ -273,7 +297,12 @@ defmodule SoleusWeb.Charts do
         |> assign(:empty, false)
 
       ~H"""
-      <svg viewBox={"0 0 #{@width} #{@height}"} class={@class} preserveAspectRatio="none" role="img">
+      <svg
+        viewBox={"0 0 #{@width} #{@height}"}
+        class={@class}
+        style={aspect(@width, @height)}
+        role="img"
+      >
         <title>Courbe vitesse-duree</title>
 
         <g>
@@ -351,12 +380,13 @@ defmodule SoleusWeb.Charts do
     required: true,
     doc: "historique d'ajustements, avec `:fitted_on` et `:cs_ms`"
 
-  attr :height, :integer, default: 150
+  attr :width, :integer, default: 680
+  attr :height, :integer, default: 260
   attr :class, :string, default: nil
 
   @doc "Derive de la vitesse critique dans le temps — la base de la projection."
   def progression_chart(assigns) do
-    width = 1000
+    width = assigns.width
     pad_left = 52
     pad_right = 14
     pad_top = 12
@@ -391,14 +421,18 @@ defmodule SoleusWeb.Charts do
 
       assigns =
         assigns
-        |> assign(:width, width)
         |> assign(:path, path)
         |> assign(:area, area)
         |> assign(:pace_ticks, pace_ticks(lo - margin, hi + margin, y))
         |> assign(:empty, false)
 
       ~H"""
-      <svg viewBox={"0 0 #{@width} #{@height}"} class={@class} preserveAspectRatio="none" role="img">
+      <svg
+        viewBox={"0 0 #{@width} #{@height}"}
+        class={@class}
+        style={aspect(@width, @height)}
+        role="img"
+      >
         <title>Progression de la vitesse critique</title>
 
         <defs>
@@ -522,6 +556,9 @@ defmodule SoleusWeb.Charts do
     |> Enum.filter(fn {day, _i} -> day.date.day == 1 and rem(day.date.month, step) == 0 end)
     |> Enum.map(fn {day, i} -> {Enum.at(@months, day.date.month - 1), x.(i)} end)
   end
+
+  # Le rapport d'aspect du viewBox, impose en CSS. Voir le @moduledoc.
+  defp aspect(width, height), do: "aspect-ratio: #{width} / #{height}"
 
   defp f(value) when is_float(value), do: Float.round(value, 2)
   defp f(value), do: value

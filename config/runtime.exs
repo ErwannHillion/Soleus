@@ -20,8 +20,15 @@ if System.get_env("PHX_SERVER") do
   config :soleus, SoleusWeb.Endpoint, server: true
 end
 
+# Ce bloc s'applique a **tous** les environnements, et il est evalue apres
+# `dev.exs` : son defaut ecrase donc le port fixe la-bas. C'est la raison pour
+# laquelle le port du serveur de developpement se change ici, et non uniquement
+# dans `dev.exs` ou le reglage semble pourtant etre.
+#
+# 4006 et non 4000 : plusieurs projets du poste de developpement ecoutent en
+# meme temps, et le port par defaut de Phoenix est deja pris ailleurs.
 config :soleus, SoleusWeb.Endpoint,
-  http: [port: String.to_integer(System.get_env("PORT", "4000"))]
+  http: [port: String.to_integer(System.get_env("PORT", "4006"))]
 
 if config_env() == :dev do
   # Reload browser tabs when matching files change.

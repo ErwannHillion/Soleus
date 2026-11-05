@@ -10,6 +10,7 @@ defmodule SoleusWeb.DashboardLive do
   use SoleusWeb, :live_view
 
   import SoleusWeb.Charts
+  import SoleusWeb.Dock
 
   alias Soleus.Analytics
   alias Soleus.Analytics.{Decoupling, Load, Pace}
@@ -20,14 +21,21 @@ defmodule SoleusWeb.DashboardLive do
   end
 
   @impl true
+  def handle_params(_params, _uri, socket) do
+    {:noreply, socket}
+  end
+
+  @impl true
   def render(assigns) do
     ~H"""
-    <div class="min-h-screen bg-ink">
-      <header class="flex items-baseline justify-between border-b border-line px-6 py-4">
+    <%!-- `h-dvh` et non `h-screen` : sur Safari iOS, `100vh` inclut la barre
+          d'adresse et la derniere rangee de panneaux passe sous l'ecran. --%>
+    <div class="flex h-dvh flex-col overflow-hidden bg-ink">
+      <header class="flex shrink-0 items-baseline justify-between border-b border-line px-5 py-3">
         <div class="flex items-baseline gap-3">
           <span class="h-2.5 w-2.5 translate-y-[-1px] bg-signal"></span>
           <h1 class="text-sm font-semibold tracking-[0.32em] text-text">SOLEUS</h1>
-          <span class="label">course a pied</span>
+          <span class="label">{view_label(@live_action)}</span>
         </div>
 
         <div class="flex items-baseline gap-6">
@@ -37,60 +45,103 @@ defmodule SoleusWeb.DashboardLive do
         </div>
       </header>
 
-      <main class="divide-y divide-line">
-        <.form_row form={@form} days={@load_days} />
-        <.load_row days={@load_days} />
-
-        <div class="grid grid-cols-1 divide-y divide-line lg:grid-cols-12 lg:divide-x lg:divide-y-0">
-          <section class="lg:col-span-4">
-            <.model_panel fit={@fit} paces={@paces} />
-          </section>
-          <section class="lg:col-span-4">
-            <.predictions_panel fit={@fit} />
-          </section>
-          <section class="lg:col-span-4">
-            <.goals_panel goals={@goals} />
-          </section>
-        </div>
-
-        <div class="grid grid-cols-1 divide-y divide-line lg:grid-cols-12 lg:divide-x lg:divide-y-0">
-          <section class="lg:col-span-7">
-            <.panel_head
-              title="Courbe vitesse-duree"
-              note={"fenetre #{Analytics.fit_window_days()} jours"}
-            />
-            <div class="px-5 pb-5">
-              <.curve_chart efforts={@curve} cs={@cs} class="h-56 w-full" />
-              <p class="mt-3 text-[11px] leading-relaxed text-faint">
-                Chaque point est le meilleur effort tenu sur cette duree. Le trait
-                est le modele de vitesse critique : plein ou il est valide,
-                pointille au dela.
-              </p>
-            </div>
-          </section>
-          <section class="lg:col-span-5">
-            <.panel_head title="Progression de la vitesse critique" note="12 mois" />
-            <div class="px-5 pb-5">
-              <.progression_chart fits={@fits} class="h-40 w-full" />
-              <p class="mt-3 text-[11px] leading-relaxed text-faint">
-                La pente de cette courbe est ce que la projection extrapole.
-              </p>
-            </div>
-          </section>
-        </div>
-
-        <div class="grid grid-cols-1 divide-y divide-line lg:grid-cols-12 lg:divide-x lg:divide-y-0">
-          <section class="lg:col-span-5">
-            <.bests_panel bests={@bests} />
-          </section>
-          <section class="lg:col-span-7">
-            <.recent_panel activities={@recent} />
-          </section>
-        </div>
+      <%!-- Le rembourrage bas laisse passer le dock : il flotte au dessus du
+            contenu, donc sans cette marge la derniere ligne reste sous lui. --%>
+      <main class="flex-1 overflow-y-auto pb-28">
+        <.view_form :if={@live_action == :form} {assigns} />
+        <.view_sessions :if={@live_action == :sessions} {assigns} />
+        <.view_curve :if={@live_action == :curve} {assigns} />
+        <.view_predictions :if={@live_action == :predictions} {assigns} />
       </main>
+
+      <.dock current={@live_action} />
     </div>
     """
   end
+
+  # -- vues -------------------------------------------------------------------
+
+  defp view_form(assigns) do
+    ~H"""
+    <div class="flex min-h-full flex-col divide-y divide-line">
+      <.form_row form={@form} days={@load_days} />
+      <.load_row days={@load_days} />
+      <div class="flex-1">
+        <.recent_panel activities={Enum.take(@recent, 8)} title="Dernieres seances" />
+      </div>
+    </div>
+    """
+  end
+
+  defp view_sessions(assigns) do
+    ~H"""
+    <div class="min-h-full">
+      <.recent_panel activities={@recent} title="Seances" />
+    </div>
+    """
+  end
+
+  defp view_curve(assigns) do
+    ~H"""
+    <div class="flex min-h-full flex-col divide-y divide-line">
+      <div class="grid grid-cols-1 divide-y divide-line xl:grid-cols-12 xl:divide-x xl:divide-y-0">
+        <section class="xl:col-span-7">
+          <.panel_head
+            title="Courbe vitesse-duree"
+            note={"fenetre #{Analytics.fit_window_days()} jours"}
+          />
+          <div class="px-5 pb-5">
+            <.curve_chart efforts={@curve} cs={@cs} class="w-full" />
+            <p class="mt-3 max-w-prose text-[11px] leading-relaxed text-faint">
+              Chaque point est le meilleur effort tenu sur cette duree. Le trait est
+              le modele de vitesse critique : plein ou il est valide, pointille au
+              dela.
+            </p>
+          </div>
+        </section>
+
+        <section class="xl:col-span-5">
+          <.panel_head title="Progression de la vitesse critique" note="12 mois" />
+          <div class="px-5 pb-5">
+            <.progression_chart fits={@fits} class="w-full" />
+            <p class="mt-3 max-w-prose text-[11px] leading-relaxed text-faint">
+              La pente de cette courbe est ce que la projection extrapole. Les
+              paliers sont normaux : la vitesse critique ne bouge que lorsqu'un
+              effort record entre dans la fenetre glissante ou en sort.
+            </p>
+          </div>
+
+          <.trend_panel goals={@goals} fits={@fits} />
+        </section>
+      </div>
+
+      <div class="flex-1">
+        <.bests_panel bests={@bests} />
+      </div>
+    </div>
+    """
+  end
+
+  defp view_predictions(assigns) do
+    ~H"""
+    <div class="grid min-h-full grid-cols-1 divide-y divide-line xl:grid-cols-12 xl:divide-x xl:divide-y-0">
+      <section class="xl:col-span-4">
+        <.model_panel fit={@fit} paces={@paces} />
+      </section>
+      <section class="xl:col-span-4">
+        <.predictions_panel fit={@fit} />
+      </section>
+      <section class="xl:col-span-4">
+        <.goals_panel goals={@goals} />
+      </section>
+    </div>
+    """
+  end
+
+  defp view_label(:form), do: "forme"
+  defp view_label(:sessions), do: "seances"
+  defp view_label(:curve), do: "courbe vitesse-duree"
+  defp view_label(:predictions), do: "predictions"
 
   # -- bandeau de forme -------------------------------------------------------
 
@@ -140,8 +191,8 @@ defmodule SoleusWeb.DashboardLive do
     <section>
       <.panel_head title="Charge et forme" note="180 jours" />
       <div class="px-5 pb-5">
-        <.load_chart days={@days} class="h-48 w-full" />
-        <.form_strip days={@days} class="mt-1 h-14 w-full" />
+        <.load_chart days={@days} class="w-full" />
+        <.form_strip days={@days} class="mt-1 w-full" />
 
         <div class="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1">
           <.legend color="var(--color-signal)" label="charge chronique" />
@@ -184,7 +235,7 @@ defmodule SoleusWeb.DashboardLive do
 
       <div :if={@paces} class="mt-5 border-t border-line pt-4">
         <div class="label mb-2">allures d'entrainement</div>
-        <div class="grid grid-cols-2 gap-x-4 gap-y-1.5">
+        <div class="grid grid-cols-1 gap-y-1.5">
           <div :for={{zone, label} <- pace_zones()} class="flex items-baseline justify-between">
             <span class="text-[11px] text-dim">{label}</span>
             <span class="num text-xs text-text">{Pace.format(@paces[zone])}</span>
@@ -277,38 +328,85 @@ defmodule SoleusWeb.DashboardLive do
     """
   end
 
+  attr :goals, :list, required: true
+  attr :fits, :list, required: true
+
+  @doc false
+  defp trend_panel(assigns) do
+    # Les projections partagent toutes la meme tendance : le gain d'allure et la
+    # fiabilite sont donc les memes sur chaque ligne, et n'ont a etre lus qu'une
+    # fois. On prend donc la premiere projection aboutie.
+    projection =
+      assigns.goals
+      |> Enum.find_value(fn
+        %{result: {:ok, %{weekly_pace_gain_s: gain}} = result} when is_number(gain) -> result
+        _other -> nil
+      end)
+      |> case do
+        {:ok, projection} -> projection
+        _other -> nil
+      end
+
+    assigns = assign(assigns, :projection, projection)
+
+    ~H"""
+    <div class="border-t border-line">
+      <.panel_head title="Tendance" note={"#{length(@fits)} ajustements"} />
+
+      <dl :if={@projection} class="grid grid-cols-2 gap-x-4 gap-y-4 px-5 pb-5">
+        <.metric
+          label="gain d'allure"
+          value={"#{signed(@projection.weekly_pace_gain_s, 1)} s/km"}
+        />
+        <.metric label="par semaine" value={confidence_label(@projection.confidence)} />
+        <.metric label="qualite de la tendance" value={"R2 #{number(@projection.r2, 3)}"} />
+        <.metric label="points ajustes" value={number(@projection.sample_count, 0)} />
+      </dl>
+
+      <p :if={is_nil(@projection)} class="px-5 pb-5 text-xs text-faint">
+        {Analytics.explain_error(:not_enough_history)}
+      </p>
+    </div>
+    """
+  end
+
+  defp confidence_label(:high), do: "fiable"
+  defp confidence_label(:medium), do: "indicative"
+  defp confidence_label(_other), do: "fragile"
+
   attr :bests, :list, required: true
 
   defp bests_panel(assigns) do
     ~H"""
     <.panel_head title="Records" note="toutes periodes" />
 
-    <table :if={@bests != []} class="w-full">
-      <tbody class="divide-y divide-line">
-        <tr :for={best <- @bests} class="row-hover">
-          <td class="py-2.5 pl-5 text-xs text-dim">{Pace.distance_label(best.distance_m)}</td>
-          <td class="num py-2.5 text-right text-sm text-text">
-            {Pace.format_duration(best.duration_s)}
-          </td>
-          <td class="num py-2.5 text-right text-[11px] text-faint">
-            {Pace.format(best.speed_ms)} /km
-          </td>
-          <td class="num py-2.5 pr-5 text-right text-[11px] text-faint">
-            {format_date(DateTime.to_date(best.started_at))}
-          </td>
-        </tr>
-      </tbody>
-    </table>
+    <div
+      :if={@bests != []}
+      class="grid grid-cols-2 gap-px border-t border-line bg-line sm:grid-cols-3 lg:grid-cols-5 2xl:grid-cols-8"
+    >
+      <article :for={best <- @bests} class="row-hover bg-ink px-4 py-3">
+        <div class="label">{Pace.distance_label(best.distance_m)}</div>
+        <div class="num mt-1 text-xl text-text">{Pace.format_duration(best.duration_s)}</div>
+        <div class="num mt-0.5 text-[11px] text-faint">
+          {Pace.format(best.speed_ms)} /km
+          <span :if={best.avg_hr} class="text-dim">· {best.avg_hr} bpm</span>
+        </div>
+        <div class="num mt-1.5 text-[10px] text-faint">
+          {format_date(DateTime.to_date(best.started_at))}
+        </div>
+      </article>
+    </div>
 
     <p :if={@bests == []} class="px-5 pb-5 text-xs text-faint">Aucun record enregistre.</p>
     """
   end
 
   attr :activities, :list, required: true
+  attr :title, :string, default: "Seances"
 
   defp recent_panel(assigns) do
     ~H"""
-    <.panel_head title="Dernieres seances" note={"#{length(@activities)} affichees"} />
+    <.panel_head title={@title} note={"#{length(@activities)} affichees"} />
 
     <table class="w-full">
       <thead>

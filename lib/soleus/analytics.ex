@@ -617,7 +617,7 @@ defmodule Soleus.Analytics do
       fits: fit_history(sport, 365),
       curve: Training.best_effort_curve(sport, Date.add(today, -@fit_window_days), today),
       bests: Training.personal_bests(sport),
-      recent: Training.list_activities(sport: sport, limit: 10),
+      recent: Training.list_activities(sport: sport, limit: 40),
       goals: next_goals(sport),
       weeks: week_summary(),
       paces: fit && fit.vdot && Vdot.training_speeds(fit.vdot)
