@@ -17,6 +17,8 @@ defmodule SoleusWeb.DashboardLive do
   alias Soleus.Analytics
   alias Soleus.Analytics.{Decoupling, Load, Pace}
   alias Soleus.Health
+  alias Soleus.Ingest.Garmin.Token
+  alias Soleus.Sync
   alias Soleus.Training
 
   # Les periodes proposees, en jours. « Tout » vaut `nil` : la borne est alors
@@ -26,12 +28,77 @@ defmodule SoleusWeb.DashboardLive do
 
   @impl true
   def mount(_params, _session, socket) do
+    if connected?(socket), do: Sync.subscribe()
+
     {:ok,
      socket
      |> assign(period: 180, sport_filter: "run", selection: nil)
      |> assign(compare: default_compare())
+     |> assign(sync: initial_sync_state())
      |> load_data()}
   end
+
+  # L'etat initial est lu dans l'historique d'Oban : si une synchronisation
+  # est deja en cours — celle du demarrage, par exemple — le bouton doit le
+  # montrer des l'ouverture de la page plutot qu'apres le premier evenement.
+  defp initial_sync_state do
+    last = Sync.last_sync()
+
+    cond do
+      Sync.running?() -> %{state: :running, label: "en cours"}
+      last && last.state == "completed" -> %{state: :idle, label: sync_age(last)}
+      last && last.state == "discarded" -> %{state: :failed, label: "cle a verifier"}
+      true -> %{state: :idle, label: "jamais"}
+    end
+  end
+
+  # Le Pruner d'Oban efface les jobs apres une semaine : l'absence de
+  # resultat ne veut donc pas dire « jamais », mais « rien depuis au moins
+  # sept jours ».
+  defp sync_age(%{completed_at: nil}), do: "date inconnue"
+
+  defp sync_age(%{completed_at: at}) do
+    case DateTime.diff(DateTime.utc_now(), DateTime.from_naive!(at, "Etc/UTC"), :minute) do
+      minutes when minutes < 2 -> "a l'instant"
+      minutes when minutes < 60 -> "il y a #{minutes} min"
+      minutes when minutes < 1440 -> "il y a #{div(minutes, 60)} h"
+      minutes -> "il y a #{div(minutes, 1440)} j"
+    end
+  end
+
+  # -- synchronisation Garmin --------------------------------------------------
+
+  @impl true
+  def handle_info({:sync, :started, _info}, socket) do
+    {:noreply, assign(socket, sync: %{state: :running, label: "connexion..."})}
+  end
+
+  def handle_info({:sync, :found, %{total: total}}, socket) do
+    {:noreply, assign(socket, sync: %{state: :running, label: "#{total} activites a verifier"})}
+  end
+
+  def handle_info({:sync, :progress, %{index: index, total: total}}, socket) do
+    {:noreply, assign(socket, sync: %{state: :running, label: "#{index} / #{total}"})}
+  end
+
+  # Les donnees ont change : on recharge la page plutot que de patcher des
+  # assigns un par un. Une seance importee touche la charge, les modeles, les
+  # records et la liste — enumerer ce qui bouge serait une liste a tenir a
+  # jour a chaque nouvelle metrique.
+  def handle_info({:sync, :done, %{imported: imported}}, socket) do
+    label = if imported > 0, do: "#{imported} nouvelle(s)", else: "deja a jour"
+
+    {:noreply,
+     socket
+     |> assign(sync: %{state: :done, label: label})
+     |> load_data()}
+  end
+
+  def handle_info({:sync, :failed, %{reason: reason}}, socket) do
+    {:noreply, assign(socket, sync: %{state: :failed, label: Token.explain(reason)})}
+  end
+
+  def handle_info(_message, socket), do: {:noreply, socket}
 
   @impl true
   def handle_params(_params, _uri, socket), do: {:noreply, socket}
@@ -55,6 +122,16 @@ defmodule SoleusWeb.DashboardLive do
       {:noreply, socket |> assign(selection: {from, to}) |> load_data()}
     else
       _too_small -> {:noreply, socket}
+    end
+  end
+
+  def handle_event("sync", _params, socket) do
+    case Sync.trigger() do
+      {:ok, _job} ->
+        {:noreply, assign(socket, sync: %{state: :running, label: "demarrage..."})}
+
+      {:error, reason} ->
+        {:noreply, assign(socket, sync: %{state: :failed, label: Token.explain(reason)})}
     end
   end
 
@@ -179,6 +256,7 @@ defmodule SoleusWeb.DashboardLive do
         <div class="flex items-center gap-5">
           <.week_stat label="cette semaine" week={@weeks.current} />
           <.week_stat label="precedente" week={@weeks.previous} muted />
+          <.sync_button sync={@sync} />
           <.period_picker current={@period} />
           <span class="num text-[11px] text-faint">{format_date(@today)}</span>
         </div>
@@ -763,6 +841,34 @@ defmodule SoleusWeb.DashboardLive do
       </dd>
       <dd :if={is_nil(@change)} class="mt-1 text-[11px] text-faint">pas de comparaison</dd>
     </div>
+    """
+  end
+
+  attr :sync, :map, required: true
+
+  defp sync_button(assigns) do
+    ~H"""
+    <button
+      type="button"
+      phx-click="sync"
+      disabled={@sync.state == :running}
+      class={[
+        "flex items-center gap-2 border px-2.5 py-1 transition-colors",
+        "text-[10px] font-medium uppercase tracking-[0.08em]",
+        @sync.state == :running && "cursor-wait border-line text-faint",
+        @sync.state == :failed && "border-alert/50 text-alert",
+        @sync.state == :done && "border-form/50 text-form",
+        @sync.state == :idle && "border-line text-dim hover:border-line-bright hover:text-text"
+      ]}
+      title="Recuperer les nouvelles seances depuis Garmin"
+    >
+      <span class={[
+        "h-3 w-3 bg-current",
+        if(@sync.state == :running, do: "hero-arrow-path animate-spin", else: "hero-arrow-down-tray")
+      ]} />
+      <span>Garmin</span>
+      <span class="num normal-case tracking-normal opacity-70">{@sync.label}</span>
+    </button>
     """
   end
 

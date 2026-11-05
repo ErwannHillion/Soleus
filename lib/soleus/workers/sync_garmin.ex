@@ -32,6 +32,7 @@ defmodule Soleus.Workers.SyncGarmin do
   alias Soleus.Config
   alias Soleus.Ingest.Garmin
   alias Soleus.Ingest.Garmin.Token
+  alias Soleus.Sync
   alias Soleus.Training
   alias Soleus.Workers.RebuildLoads
 
@@ -43,29 +44,51 @@ defmodule Soleus.Workers.SyncGarmin do
     to = Date.utc_today()
     from = Date.add(to, -days)
 
+    Sync.broadcast({:sync, :started, %{days: days}})
+
     case Garmin.search_activities(from, to) do
-      {:ok, activities} ->
-        imported = Enum.reduce(activities, 0, &import_one/2)
-
-        if imported > 0 do
-          Logger.info("Garmin : #{imported} nouvelle(s) seance(s)")
-          %{} |> RebuildLoads.new() |> Oban.insert()
-        end
-
-        :ok
-
-      {:error, :api_key_rejected} = error ->
-        Logger.error(Token.explain(:api_key_rejected))
-        {:discard, error}
-
-      {:error, :no_api_key} ->
-        # Pas une panne : la synchronisation est optionnelle, et l'import de
-        # fichiers FIT fonctionne sans.
-        {:discard, :no_api_key}
-
-      {:error, reason} ->
-        {:error, reason}
+      {:ok, activities} -> import_all(activities)
+      {:error, reason} -> fail(reason)
     end
+  end
+
+  defp import_all(activities) do
+    total = length(activities)
+    Sync.broadcast({:sync, :found, %{total: total}})
+
+    imported =
+      activities
+      |> Enum.with_index(1)
+      |> Enum.reduce(0, fn {activity, index}, done ->
+        Sync.broadcast({:sync, :progress, %{index: index, total: total}})
+        import_one(activity, done)
+      end)
+
+    if imported > 0 do
+      Logger.info("Garmin : #{imported} nouvelle(s) seance(s)")
+      %{} |> RebuildLoads.new() |> Oban.insert()
+    end
+
+    Sync.broadcast({:sync, :done, %{imported: imported, seen: total}})
+    :ok
+  end
+
+  defp fail(:api_key_rejected) do
+    Logger.error(Token.explain(:api_key_rejected))
+    Sync.broadcast({:sync, :failed, %{reason: :api_key_rejected}})
+    {:discard, :api_key_rejected}
+  end
+
+  # Pas une panne : la synchronisation est optionnelle, et l'import de
+  # fichiers FIT fonctionne sans cle.
+  defp fail(:no_api_key) do
+    Sync.broadcast({:sync, :failed, %{reason: :no_api_key}})
+    {:discard, :no_api_key}
+  end
+
+  defp fail(reason) do
+    Sync.broadcast({:sync, :failed, %{reason: reason}})
+    {:error, reason}
   end
 
   defp import_one(%{"activityId" => id}, imported) do

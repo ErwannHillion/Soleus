@@ -52,6 +52,10 @@ fichier, au format [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 - Fond de carte OpenStreetMap sur le tracé GPS d'une séance, via Leaflet servi
   localement
 
+- Bouton « Garmin » dans l'interface pour récupérer les séances à la demande,
+  avec l'avancement en direct, et rattrapage automatique au démarrage de
+  l'application
+
 ### Fixed
 
 - FC moyenne des efforts records sur les fichiers à enregistrement intelligent :

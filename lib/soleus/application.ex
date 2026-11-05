@@ -23,7 +23,18 @@ defmodule Soleus.Application do
     # See https://elixir.hexdocs.pm/Supervisor.html
     # for other strategies and supported options
     opts = [strategy: :one_for_one, name: Soleus.Supervisor]
-    Supervisor.start_link(children, opts)
+
+    case Supervisor.start_link(children, opts) do
+      {:ok, pid} ->
+        # Rattrapage au demarrage : le cron de minuit ne se declenche que si
+        # l'application tourne a cet instant, ce qui n'arrive presque jamais
+        # sur un poste qu'on eteint. Voir `Soleus.Sync`.
+        Soleus.Sync.schedule_boot_catch_up()
+        {:ok, pid}
+
+      error ->
+        error
+    end
   end
 
   # Tell Phoenix to update the endpoint configuration

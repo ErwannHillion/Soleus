@@ -83,8 +83,24 @@ mix soleus.garmin check     # verifie la cle et interroge un endpoint reel
 mix soleus.garmin sync      # synchronise les 7 derniers jours
 ```
 
-Une fois la cle en place, `Soleus.Workers.SyncGarmin` tourne chaque nuit a
-00h10, juste avant le reajustement des modeles.
+Une fois la cle en place, la synchronisation part de trois facons :
+
+| Declencheur | Quand |
+| --- | --- |
+| **Au demarrage** | 20 secondes apres le lancement de l'application |
+| **Bouton Garmin** | a la demande, en haut a droite de l'interface |
+| **Cron** | chaque nuit a 00h10, avant le reajustement des modeles |
+
+Le rattrapage au demarrage est le plus utile en pratique : le cron de minuit
+ne se declenche que si l'application tourne a cet instant, ce qui n'arrive
+presque jamais sur un poste qu'on eteint.
+
+Les trois chemins passent par le meme job, `unique` sur cinq minutes : ouvrir
+l'application juste avant minuit et cliquer sur le bouton ne declenche qu'une
+seule execution.
+
+Chaque passage coute deux requetes — un echange de jeton, une recherche — plus
+une par seance nouvelle.
 
 La cle expire au bout d'un an au plus et Garmin n'emet **pas** de jeton de
 rafraichissement : le jour ou elle expire, la synchronisation s'arrete avec un
