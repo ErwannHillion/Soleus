@@ -38,6 +38,17 @@ fichier, au format [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
   le graphique de charge
 - Filtre par sport sur la liste des séances
 
+- Page d'accueil : vue d'ensemble reprenant forme, charge, état du jour,
+  modèle, prédictions et dernières séances
+- Vue détail d'une séance : tracé GPS, allure, fréquence cardiaque, altitude et
+  portions kilométriques
+- **Lecture au survol** sur tous les graphiques : date et valeurs de chaque
+  série, résolues côté client
+- Phases de sommeil en graphe empilé
+- Comparaison de deux périodes arbitraires côte à côte
+- Confrontation de la charge chronique de Soleus à celle de Garmin, avec leur
+  corrélation
+
 ### Fixed
 
 - FC moyenne des efforts records sur les fichiers à enregistrement intelligent :
@@ -66,3 +77,9 @@ fichier, au format [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 - L'état de santé se reconstitue sur une fenêtre de quatorze jours plutôt que
   sur la seule dernière ligne : toutes les mesures n'arrivent pas le même jour,
   et la charge d'entraînement du jour affichait un tiret
+- Le schéma corporel était une silhouette en capsules qui ne ressemblait pas à
+  un corps ; refait en tracé anatomique, chaque partie posée sur un fond opaque
+  pour que les recouvrements ne laissent plus voir ce qui passe dessous
+- Les distances de la comparaison s'affichaient en mètres
+- L'échelle des barres de portions va de la plus lente à la plus rapide : sur
+  une sortie régulière, rapportées à zéro, elles étaient toutes identiques

@@ -174,7 +174,7 @@ defmodule Soleus.Health do
       %{
         key: :heart,
         label: "Frequence au repos",
-        region: "coeur",
+        region: "thorax",
         status: DailyWellness.situate(day.resting_hr, day.hr_baseline_low, day.hr_baseline_high),
         value: unit_text(day.resting_hr, "bpm"),
         detail: baseline_text(day.hr_baseline_low, day.hr_baseline_high, "bpm")
@@ -182,7 +182,7 @@ defmodule Soleus.Health do
       %{
         key: :hrv,
         label: "Variabilite cardiaque",
-        region: "coeur",
+        region: "thorax",
         status:
           DailyWellness.situate(day.hrv_overnight, day.hrv_baseline_low, day.hrv_baseline_high),
         value: unit_text(day.hrv_overnight, "ms"),
@@ -191,7 +191,7 @@ defmodule Soleus.Health do
       %{
         key: :respiration,
         label: "Respiration",
-        region: "poumons",
+        region: "thorax",
         status: :in_range,
         value: unit_text(day.respiration_avg, "/min"),
         detail: range_text(day.respiration_low, day.respiration_high)
@@ -223,7 +223,7 @@ defmodule Soleus.Health do
       %{
         key: :vo2max,
         label: "VO2max estimee",
-        region: "coeur",
+        region: "thorax",
         status: if(is_number(day.vo2max), do: :in_range, else: :unknown),
         value: unit_text(day.vo2max, "ml/kg/min"),
         detail: "estimation Garmin"

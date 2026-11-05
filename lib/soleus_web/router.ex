@@ -17,10 +17,13 @@ defmodule SoleusWeb.Router do
   scope "/", SoleusWeb do
     pipe_through :browser
 
-    live "/", DashboardLive, :form
+    live "/", DashboardLive, :home
+    live "/forme", DashboardLive, :form
     live "/seances", DashboardLive, :sessions
     live "/courbe", DashboardLive, :curve
     live "/corps", DashboardLive, :body
+    live "/compare", DashboardLive, :compare
+    live "/seance/:id", ActivityLive, :show
     live "/predictions", DashboardLive, :predictions
   end
 

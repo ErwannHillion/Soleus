@@ -18,10 +18,12 @@ defmodule SoleusWeb.Dock do
   use SoleusWeb, :verified_routes
 
   @items [
-    %{action: :form, path: "/", icon: "hero-bolt", label: "Forme"},
+    %{action: :home, path: "/", icon: "hero-squares-2x2", label: "Accueil"},
+    %{action: :form, path: "/forme", icon: "hero-bolt", label: "Forme"},
     %{action: :sessions, path: "/seances", icon: "hero-queue-list", label: "Seances"},
     %{action: :curve, path: "/courbe", icon: "hero-presentation-chart-line", label: "Courbe"},
     %{action: :body, path: "/corps", icon: "hero-heart", label: "Corps"},
+    %{action: :compare, path: "/compare", icon: "hero-scale", label: "Comparer"},
     %{action: :predictions, path: "/predictions", icon: "hero-flag", label: "Predictions"}
   ]
 

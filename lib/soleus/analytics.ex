@@ -662,10 +662,118 @@ defmodule Soleus.Analytics do
 
   defp cs_of(_fit), do: nil
 
+  @doc """
+  Totaux d'entrainement d'une plage, pour comparer deux periodes.
+
+  `ctl_end` est la charge chronique au dernier jour de la plage, et non une
+  moyenne : c'est un etat, pas un cumul, et le moyenner sur six mois de
+  montee en charge ne voudrait rien dire.
+  """
+  @spec training_totals(Date.t(), Date.t()) :: map()
+  def training_totals(from, to) do
+    totals =
+      Repo.one(
+        from d in DailyLoad,
+          where: d.date >= ^from and d.date <= ^to,
+          select: %{
+            days: count(d.date),
+            distance_m: coalesce(sum(d.distance_m), 0.0),
+            moving_time_s: coalesce(sum(d.moving_time_s), 0),
+            load: coalesce(sum(d.load), 0.0),
+            activity_count: coalesce(sum(d.activity_count), 0)
+          }
+      ) || %{days: 0, distance_m: 0.0, moving_time_s: 0, load: 0.0, activity_count: 0}
+
+    last =
+      Repo.one(
+        from d in DailyLoad,
+          where: d.date >= ^from and d.date <= ^to,
+          order_by: [desc: d.date],
+          limit: 1
+      )
+
+    totals
+    |> decimals_to_floats()
+    |> Map.merge(%{
+      ctl_end: last && last.ctl,
+      tsb_end: last && last.tsb,
+      weeks: max(Date.diff(to, from) / 7, 1.0)
+    })
+  end
+
+  @doc """
+  Coefficient de correlation de Pearson entre deux series datees.
+
+  Sert a confronter la charge de Soleus a celle de Garmin. Les deux n'ont pas
+  la meme echelle — un score rapporte a la vitesse critique contre un EPOC
+  estime — donc leurs valeurs ne se comparent pas. Leur **forme**, si : si les
+  deux modeles decrivent la meme realite physiologique, ils doivent monter et
+  redescendre ensemble.
+
+  Seules les dates presentes dans les deux series sont retenues. Rend `nil`
+  en dessous de dix points communs, ou quand une serie est constante.
+  """
+  @spec correlation([{Date.t(), number()}], [{Date.t(), number()}]) :: float() | nil
+  def correlation(left, right) do
+    right_by_date = Map.new(right)
+
+    pairs =
+      left
+      |> Enum.flat_map(fn {date, value} ->
+        case Map.get(right_by_date, date) do
+          nil -> []
+          other -> [{value * 1.0, other * 1.0}]
+        end
+      end)
+
+    pearson(pairs)
+  end
+
+  defp pearson(pairs) when length(pairs) < 10, do: nil
+
+  defp pearson(pairs) do
+    n = length(pairs)
+    mx = pairs |> Enum.map(&elem(&1, 0)) |> Enum.sum() |> Kernel./(n)
+    my = pairs |> Enum.map(&elem(&1, 1)) |> Enum.sum() |> Kernel./(n)
+
+    {cov, var_x, var_y} =
+      Enum.reduce(pairs, {0.0, 0.0, 0.0}, fn {x, y}, {c, vx, vy} ->
+        dx = x - mx
+        dy = y - my
+        {c + dx * dy, vx + dx * dx, vy + dy * dy}
+      end)
+
+    denominator = :math.sqrt(var_x * var_y)
+
+    if denominator > 0, do: cov / denominator
+  end
+
+  @doc """
+  La charge quotidienne de Soleus sur une plage, pour la confronter a Garmin.
+  """
+  @spec load_points(Date.t(), Date.t()) :: [{Date.t(), float()}]
+  def load_points(from, to) do
+    Repo.all(
+      from d in DailyLoad,
+        where: d.date >= ^from and d.date <= ^to,
+        order_by: [asc: d.date],
+        select: {d.date, d.ctl}
+    )
+  end
+
   # -- utilitaires ------------------------------------------------------------
 
   defp ok_or_nil({:ok, value}), do: value
   defp ok_or_nil(_), do: nil
+
+  # Les agregats SQL rendent des `Decimal`. Les ramener en flottants ici evite
+  # que chaque appelant ait a y penser pour afficher un chiffre.
+  defp decimals_to_floats(map) do
+    Map.new(map, fn
+      {k, %Decimal{} = d} -> {k, Decimal.to_float(d)}
+      {k, v} -> {k, v}
+    end)
+  end
 
   defp to_float(nil), do: 0.0
   defp to_float(%Decimal{} = d), do: Decimal.to_float(d)

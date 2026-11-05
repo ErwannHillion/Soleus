@@ -13,6 +13,7 @@ defmodule SoleusWeb.DashboardLive do
   import SoleusWeb.BodyFigure
   import SoleusWeb.Dock
 
+  alias Phoenix.LiveView.JS
   alias Soleus.Analytics
   alias Soleus.Analytics.{Decoupling, Load, Pace}
   alias Soleus.Health
@@ -28,6 +29,7 @@ defmodule SoleusWeb.DashboardLive do
     {:ok,
      socket
      |> assign(period: 180, sport_filter: "run", selection: nil)
+     |> assign(compare: default_compare())
      |> load_data()}
   end
 
@@ -60,6 +62,18 @@ defmodule SoleusWeb.DashboardLive do
     {:noreply, socket |> assign(selection: nil) |> load_data()}
   end
 
+  def handle_event("set_compare", params, socket) do
+    compare =
+      Enum.reduce(~w(a_from a_to b_from b_to)a, socket.assigns.compare, fn key, acc ->
+        case Date.from_iso8601(params[Atom.to_string(key)] || "") do
+          {:ok, date} -> Map.put(acc, key, date)
+          _invalid -> acc
+        end
+      end)
+
+    {:noreply, socket |> assign(compare: compare) |> load_compare()}
+  end
+
   def handle_event("set_sport", %{"sport" => raw}, socket) do
     sport = if raw in ["", "all"], do: nil, else: raw
     {:noreply, socket |> assign(sport_filter: sport) |> load_data()}
@@ -72,6 +86,38 @@ defmodule SoleusWeb.DashboardLive do
       {days, ""} when days > 0 -> days
       _invalid -> 180
     end
+  end
+
+  # Par defaut, le mois en cours contre le precedent : c'est la comparaison
+  # qu'on fait spontanement, et elle donne un point de depart a ajuster plutot
+  # qu'un formulaire vide.
+  defp default_compare do
+    today = Date.utc_today()
+
+    %{
+      a_from: Date.add(today, -30),
+      a_to: today,
+      b_from: Date.add(today, -60),
+      b_to: Date.add(today, -31)
+    }
+  end
+
+  defp load_compare(socket) do
+    %{a_from: a_from, a_to: a_to, b_from: b_from, b_to: b_to} = socket.assigns.compare
+
+    assign(socket,
+      compare_a: period_summary(a_from, a_to),
+      compare_b: period_summary(b_from, b_to)
+    )
+  end
+
+  defp period_summary(from, to) do
+    %{
+      from: from,
+      to: to,
+      training: Analytics.training_totals(from, to),
+      health: Health.averages(from, to)
+    }
   end
 
   # Une seule fonction de chargement, appelee au montage et apres chaque
@@ -97,6 +143,16 @@ defmodule SoleusWeb.DashboardLive do
     |> assign(:until, until)
     |> then(&assign(&1, :load_days, clamp_days(&1.assigns.load_days, since, until)))
     |> assign(:wellness, Health.range(since, until))
+    |> then(fn socket ->
+      mine = Analytics.load_points(since, until)
+      theirs = Health.series(:garmin_chronic_load, since, until)
+
+      socket
+      |> assign(:my_load, mine)
+      |> assign(:garmin_load, theirs)
+      |> assign(:load_correlation, Analytics.correlation(mine, theirs))
+    end)
+    |> load_compare()
     |> assign(:health_snapshot, Health.snapshot())
     |> assign(:today_health, Health.latest())
     |> assign(:health_averages, Health.averages(since, until))
@@ -131,10 +187,12 @@ defmodule SoleusWeb.DashboardLive do
       <%!-- Le rembourrage bas laisse passer le dock : il flotte au dessus du
             contenu, donc sans cette marge la derniere ligne reste sous lui. --%>
       <main class="flex-1 overflow-y-auto pb-28">
+        <.view_home :if={@live_action == :home} {assigns} />
         <.view_form :if={@live_action == :form} {assigns} />
         <.view_sessions :if={@live_action == :sessions} {assigns} />
         <.view_curve :if={@live_action == :curve} {assigns} />
         <.view_body :if={@live_action == :body} {assigns} />
+        <.view_compare :if={@live_action == :compare} {assigns} />
         <.view_predictions :if={@live_action == :predictions} {assigns} />
       </main>
 
@@ -145,11 +203,86 @@ defmodule SoleusWeb.DashboardLive do
 
   # -- vues -------------------------------------------------------------------
 
+  # -- vue d'ensemble ----------------------------------------------------------
+
+  # L'accueil ne presente aucune donnee qui lui soit propre : il reprend, en
+  # plus serre, ce que chaque page detaille. Le decoupage suit les trois
+  # questions qu'on se pose en ouvrant l'application — suis-je en forme, ou
+  # j'en suis, et qu'est-ce que j'ai fait recemment.
+  defp view_home(assigns) do
+    {snapshot, as_of} =
+      case assigns.health_snapshot do
+        {snapshot, as_of} -> {snapshot, as_of}
+        nil -> {nil, nil}
+      end
+
+    assigns =
+      assigns
+      |> assign(:systems, Health.systems(snapshot))
+      |> assign(:as_of, as_of)
+
+    ~H"""
+    <div class="flex min-h-full flex-col divide-y divide-line">
+      <.form_row form={@form} days={@load_days} />
+
+      <div class="grid grid-cols-1 divide-y divide-line xl:grid-cols-12 xl:divide-x xl:divide-y-0">
+        <section class="xl:col-span-8">
+          <.panel_head title="Charge et forme" note={range_note(@since, @until, @selection)} />
+          <div class="px-5 pb-5">
+            <.load_chart id="home-load" days={@load_days} class="w-full" />
+            <.form_strip days={@load_days} class="mt-1 w-full" />
+          </div>
+        </section>
+
+        <section class="xl:col-span-4">
+          <.panel_head title="Etat du jour" note={@as_of && format_date(@as_of)} />
+          <div class="flex items-start gap-4 px-5 pb-5">
+            <.body_figure systems={@systems} class="h-56 w-auto shrink-0" />
+            <dl class="grid flex-1 grid-cols-1 gap-y-3">
+              <.metric
+                :for={system <- Enum.take(@systems, 5)}
+                label={system.label}
+                value={system.value}
+              >
+                <span
+                  class="ml-2 h-1.5 w-1.5 shrink-0 self-center rounded-full"
+                  style={"background-color: #{status_color(system.status)}"}
+                ></span>
+              </.metric>
+            </dl>
+          </div>
+        </section>
+      </div>
+
+      <div class="grid grid-cols-1 divide-y divide-line xl:grid-cols-12 xl:divide-x xl:divide-y-0">
+        <section class="xl:col-span-4">
+          <.model_panel fit={@fit} paces={@paces} />
+        </section>
+        <section class="xl:col-span-4">
+          <.predictions_panel fit={@fit} />
+        </section>
+        <section class="xl:col-span-4">
+          <.goals_panel goals={@goals} />
+        </section>
+      </div>
+
+      <div class="flex-1">
+        <.recent_panel activities={Enum.take(@recent, 10)} title="Dernieres seances" />
+      </div>
+    </div>
+    """
+  end
+
   defp view_form(assigns) do
     ~H"""
     <div class="flex min-h-full flex-col divide-y divide-line">
       <.form_row form={@form} days={@load_days} />
       <.load_row days={@load_days} since={@since} until={@until} selection={@selection} />
+      <.overlay_panel
+        mine={@my_load}
+        theirs={@garmin_load}
+        correlation={@load_correlation}
+      />
       <div class="flex-1">
         <.recent_panel activities={Enum.take(@recent, 8)} title="Dernieres seances" />
       </div>
@@ -211,6 +344,9 @@ defmodule SoleusWeb.DashboardLive do
 
       <div class="grid flex-1 grid-cols-1 divide-y divide-line xl:grid-cols-2 xl:divide-x xl:divide-y-0">
         <.wellness_panel
+          id="chart-hrv"
+          series_label="variabilite"
+          unit=" ms"
           title="Variabilite cardiaque"
           note="nocturne, avec ta fourchette normale"
           points={wellness_points(@wellness, :hrv_overnight)}
@@ -218,6 +354,9 @@ defmodule SoleusWeb.DashboardLive do
           color="var(--color-signal)"
         />
         <.wellness_panel
+          id="chart-rhr"
+          series_label="FC au repos"
+          unit=" bpm"
           title="Frequence au repos"
           note="plus bas, mieux c'est"
           points={wellness_points(@wellness, :resting_hr)}
@@ -225,21 +364,261 @@ defmodule SoleusWeb.DashboardLive do
           color="var(--color-alert)"
         />
         <.wellness_panel
-          title="Sommeil"
-          note="heures par nuit"
-          points={wellness_points(@wellness, :sleep_total_s, &(&1 / 3600))}
-          color="var(--color-form)"
+          id="chart-stress"
+          series_label="stress moyen"
+          title="Stress"
+          note="moyenne de la journee"
+          points={wellness_points(@wellness, :stress_avg)}
+          color="var(--color-alert)"
         />
         <.wellness_panel
+          id="chart-battery"
+          series_label="pic"
           title="Reserve d'energie"
           note="pic quotidien"
           points={wellness_points(@wellness, :body_battery_high)}
           color="var(--color-fatigue)"
         />
       </div>
+
+      <.sleep_panel nights={@wellness} />
     </div>
     """
   end
+
+  attr :nights, :list, required: true
+
+  defp sleep_panel(assigns) do
+    ~H"""
+    <section class="border-t border-line">
+      <.panel_head
+        title="Phases de sommeil"
+        note={"#{Enum.count(@nights, & &1.sleep_total_s)} nuits"}
+      />
+      <div class="px-5 pb-5">
+        <.sleep_chart nights={@nights} class="w-full" />
+        <div class="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1">
+          <.legend :for={{_field, label, color} <- sleep_phases()} color={color} label={label} />
+        </div>
+      </div>
+    </section>
+    """
+  end
+
+  attr :mine, :list, required: true
+  attr :theirs, :list, required: true
+  attr :correlation, :any, default: nil
+
+  defp overlay_panel(assigns) do
+    ~H"""
+    <section>
+      <.panel_head
+        title="Charge chronique : Soleus contre Garmin"
+        note={correlation_note(@correlation)}
+      />
+      <div class="px-5 pb-5">
+        <.overlay_chart
+          mine={@mine}
+          theirs={@theirs}
+          mine_label="Soleus (CTL)"
+          theirs_label="Garmin (charge chronique)"
+          class="w-full"
+        />
+        <div class="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1">
+          <.legend color="var(--color-signal)" label="Soleus" />
+          <.legend color="var(--color-fatigue)" label="Garmin" />
+        </div>
+        <p class="mt-3 max-w-prose text-[11px] leading-relaxed text-faint">
+          Les deux echelles sont incomparables par construction — un score
+          rapporte a la vitesse critique contre un EPOC estime — donc chaque
+          serie est ramenee a sa propre amplitude et l'axe n'est pas gradue.
+          Ce qui se compare, c'est la forme.
+        </p>
+      </div>
+    </section>
+    """
+  end
+
+  defp correlation_note(nil), do: "pas assez de jours communs"
+
+  defp correlation_note(r) do
+    qualite =
+      cond do
+        r > 0.9 -> "tres proches"
+        r > 0.7 -> "concordants"
+        r > 0.4 -> "partiellement concordants"
+        true -> "divergents"
+      end
+
+    "r = #{Float.round(r, 2)} · #{qualite}"
+  end
+
+  defp view_compare(assigns) do
+    ~H"""
+    <div class="min-h-full">
+      <form
+        phx-change="set_compare"
+        class="flex flex-wrap items-end gap-6 border-b border-line px-5 py-4"
+      >
+        <.range_input legend="Periode A" prefix="a" from={@compare.a_from} to={@compare.a_to} accent />
+        <.range_input legend="Periode B" prefix="b" from={@compare.b_from} to={@compare.b_to} />
+      </form>
+
+      <.panel_head
+        title="Entrainement"
+        note={"#{@compare_a.training.days} jours contre #{@compare_b.training.days}"}
+      />
+      <div class="grid grid-cols-2 gap-px border-y border-line bg-line sm:grid-cols-3 2xl:grid-cols-6">
+        <.versus
+          label="distance"
+          a={@compare_a.training.distance_m}
+          b={@compare_b.training.distance_m}
+          format={:km}
+        />
+        <.versus
+          label="temps"
+          a={@compare_a.training.moving_time_s}
+          b={@compare_b.training.moving_time_s}
+          format={:duration}
+        />
+        <.versus
+          label="seances"
+          a={@compare_a.training.activity_count}
+          b={@compare_b.training.activity_count}
+        />
+        <.versus
+          label="charge cumulee"
+          a={@compare_a.training.load}
+          b={@compare_b.training.load}
+          format={:count}
+        />
+        <.versus
+          label="par semaine"
+          a={per_week(@compare_a.training)}
+          b={per_week(@compare_b.training)}
+          format={:km}
+        />
+        <.versus
+          label="charge chronique"
+          a={@compare_a.training.ctl_end}
+          b={@compare_b.training.ctl_end}
+        />
+      </div>
+
+      <.panel_head title="Sante" note="moyennes sur la periode" />
+      <div class="grid grid-cols-2 gap-px border-y border-line bg-line sm:grid-cols-3 2xl:grid-cols-6">
+        <.versus
+          label="sommeil"
+          a={@compare_a.health[:sleep_total_s]}
+          b={@compare_b.health[:sleep_total_s]}
+          format={:duration}
+        />
+        <.versus
+          label="score de sommeil"
+          a={@compare_a.health[:sleep_score]}
+          b={@compare_b.health[:sleep_score]}
+        />
+        <.versus
+          label="variabilite"
+          a={@compare_a.health[:hrv_overnight]}
+          b={@compare_b.health[:hrv_overnight]}
+          unit=" ms"
+        />
+        <.versus
+          label="FC au repos"
+          a={@compare_a.health[:resting_hr]}
+          b={@compare_b.health[:resting_hr]}
+          unit=" bpm"
+          lower_is_better
+        />
+        <.versus
+          label="stress"
+          a={@compare_a.health[:stress_avg]}
+          b={@compare_b.health[:stress_avg]}
+          lower_is_better
+        />
+        <.versus
+          label="etat de forme"
+          a={@compare_a.health[:training_readiness]}
+          b={@compare_b.health[:training_readiness]}
+        />
+      </div>
+
+      <p class="max-w-prose px-5 py-5 text-[11px] leading-relaxed text-faint">
+        Les deux periodes peuvent avoir des longueurs differentes. Les totaux
+        cumules — distance, temps, charge — ne sont alors pas comparables tels
+        quels ; la ligne « par semaine » l'est, elle.
+      </p>
+    </div>
+    """
+  end
+
+  attr :legend, :string, required: true
+  attr :prefix, :string, required: true
+  attr :from, Date, required: true
+  attr :to, Date, required: true
+  attr :accent, :boolean, default: false
+
+  defp range_input(assigns) do
+    ~H"""
+    <fieldset class="flex items-end gap-2">
+      <legend class={["label mb-1.5", @accent && "text-signal"]}>{@legend}</legend>
+      <input
+        type="date"
+        name={"#{@prefix}_from"}
+        value={Date.to_iso8601(@from)}
+        class="num border border-line bg-panel px-2 py-1 text-[11px] text-text"
+      />
+      <span class="pb-1 text-[10px] text-faint">au</span>
+      <input
+        type="date"
+        name={"#{@prefix}_to"}
+        value={Date.to_iso8601(@to)}
+        class="num border border-line bg-panel px-2 py-1 text-[11px] text-text"
+      />
+    </fieldset>
+    """
+  end
+
+  attr :label, :string, required: true
+  attr :a, :any, default: nil
+  attr :b, :any, default: nil
+  attr :unit, :string, default: ""
+  attr :format, :atom, default: :number
+  attr :lower_is_better, :boolean, default: false
+
+  # Les deux valeurs cote a cote, et leur ecart. L'ecart est colore selon le
+  # sens du progres, qui depend de la mesure : gagner des battements au repos
+  # est une mauvaise nouvelle, en gagner en variabilite une bonne.
+  defp versus(assigns) do
+    change = if is_number(assigns.a) and is_number(assigns.b), do: assigns.a - assigns.b
+
+    improving? =
+      is_number(change) and
+        ((assigns.lower_is_better and change < 0) or (not assigns.lower_is_better and change > 0))
+
+    assigns = assign(assigns, change: change, improving?: improving?)
+
+    ~H"""
+    <div class="bg-ink px-5 py-4">
+      <div class="label">{@label}</div>
+      <div class="num mt-1.5 text-xl leading-none text-signal">
+        {measure(@a, @format, @unit)}
+      </div>
+      <div class="num mt-1 text-[11px] text-dim">{measure(@b, @format, @unit)}</div>
+      <div
+        :if={is_number(@change)}
+        class="num mt-1.5 text-[11px]"
+        style={"color: #{if @improving?, do: "var(--color-form)", else: "var(--color-fatigue)"}"}
+      >
+        {signed_measure(@change, @format, @unit)}
+      </div>
+    </div>
+    """
+  end
+
+  defp per_week(%{distance_m: distance, weeks: weeks}) when weeks > 0, do: distance / weeks
+  defp per_week(_totals), do: nil
 
   attr :system, :map, required: true
 
@@ -264,7 +643,10 @@ defmodule SoleusWeb.DashboardLive do
 
   attr :title, :string, required: true
   attr :note, :string, default: nil
+  attr :id, :string, required: true
   attr :points, :list, required: true
+  attr :series_label, :string, required: true
+  attr :unit, :string, default: ""
   attr :baseline, :any, default: nil
   attr :color, :string, default: "var(--color-signal)"
 
@@ -273,7 +655,15 @@ defmodule SoleusWeb.DashboardLive do
     <section>
       <.panel_head title={@title} note={@note} />
       <div class="px-5 pb-5">
-        <.daily_chart points={@points} baseline={@baseline} color={@color} class="w-full" />
+        <.daily_chart
+          id={@id}
+          points={@points}
+          series_label={@series_label}
+          unit={@unit}
+          baseline={@baseline}
+          color={@color}
+          class="w-full"
+        />
       </div>
     </section>
     """
@@ -489,10 +879,12 @@ defmodule SoleusWeb.DashboardLive do
     """
   end
 
+  defp view_label(:home), do: "vue d'ensemble"
   defp view_label(:form), do: "forme"
   defp view_label(:sessions), do: "seances"
   defp view_label(:curve), do: "courbe vitesse-duree"
   defp view_label(:body), do: "corps"
+  defp view_label(:compare), do: "comparaison"
   defp view_label(:predictions), do: "predictions"
 
   # -- bandeau de forme -------------------------------------------------------
@@ -803,7 +1195,11 @@ defmodule SoleusWeb.DashboardLive do
         </tr>
       </thead>
       <tbody class="divide-y divide-line">
-        <tr :for={activity <- @activities} class="row-hover">
+        <tr
+          :for={activity <- @activities}
+          class="row-hover cursor-pointer"
+          phx-click={JS.navigate(~p"/seance/#{activity.id}")}
+        >
           <td class="num py-2 pl-5 text-[11px] text-faint">
             {format_date(activity.local_date)}
           </td>
@@ -946,6 +1342,8 @@ defmodule SoleusWeb.DashboardLive do
   end
 
   defp measure(nil, _format, _unit), do: "—"
+  defp measure(value, :km, _unit), do: number(value / 1000, 1) <> " km"
+  defp measure(value, :count, _unit), do: number(value, 0)
   # Heures et minutes, et non `h:mm:ss` : les secondes d'une moyenne de
   # sommeil sur six mois n'apportent rien et encombrent la lecture.
   defp measure(value, :duration, _unit) do
@@ -962,6 +1360,8 @@ defmodule SoleusWeb.DashboardLive do
     "#{sign}#{div(total, 60)} min"
   end
 
+  defp signed_measure(value, :km, _unit), do: signed(value / 1000, 1) <> " km"
+  defp signed_measure(value, :count, _unit), do: signed(value, 0)
   defp signed_measure(value, _format, unit), do: signed(value, 1) <> unit
 
   @sport_labels %{

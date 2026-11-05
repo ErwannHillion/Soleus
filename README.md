@@ -117,6 +117,23 @@ quotidienne, ajustements historiques des modeles, ajustement du jour.
 L'etape des ajustements historiques est celle qu'on oublie : sans elle la
 projection n'a aucune pente a extrapoler.
 
+## Les pages
+
+| Page | Contenu |
+| --- | --- |
+| Accueil | vue d'ensemble : forme, charge, etat du jour, modele, predictions |
+| Forme | charge et forme sur la periode, confrontation a Garmin |
+| Seances | liste filtrable par sport ; une ligne ouvre le detail |
+| Seance | trace GPS, allure, FC, altitude, portions kilometriques |
+| Courbe | courbe vitesse-duree, progression de la vitesse critique, records |
+| Corps | schema corporel, mesures de sante, sommeil, comparaison |
+| Comparer | deux periodes arbitraires cote a cote |
+| Predictions | modele, temps predits, objectifs dates |
+
+Tous les graphiques se lisent au survol. La periode se choisit en haut a
+droite, et une zone se definit directement au curseur sur le graphique de
+charge.
+
 ## Notes de conception
 
 Les choix qui ne se devinent pas a la lecture sont commentes a l'endroit ou ils
