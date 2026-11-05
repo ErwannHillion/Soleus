@@ -15,7 +15,8 @@ defmodule Soleus.MeanMaximalTest do
 
   describe "by_duration/1" do
     test "retrouve exactement une allure constante" do
-      effort = constant(4.0, 600) |> MM.grid() |> MM.by_duration() |> Enum.find(&(&1.duration_s == 60))
+      effort =
+        constant(4.0, 600) |> MM.grid() |> MM.by_duration() |> Enum.find(&(&1.duration_s == 60))
 
       assert_in_delta effort.speed_ms, 4.0, 0.001
     end
@@ -45,7 +46,11 @@ defmodule Soleus.MeanMaximalTest do
 
   describe "by_distance/1" do
     test "chronometre une distance a allure constante" do
-      effort = constant(4.0, 600) |> MM.grid() |> MM.by_distance() |> Enum.find(&(&1.distance_m == 1000.0))
+      effort =
+        constant(4.0, 600)
+        |> MM.grid()
+        |> MM.by_distance()
+        |> Enum.find(&(&1.distance_m == 1000.0))
 
       assert effort.duration_s == 250
     end
@@ -53,7 +58,8 @@ defmodule Soleus.MeanMaximalTest do
 
   describe "frequence cardiaque" do
     test "moyenne la FC sur la fenetre, sans la diluer" do
-      effort = constant(4.0, 600) |> MM.grid() |> MM.by_duration() |> Enum.find(&(&1.duration_s == 60))
+      effort =
+        constant(4.0, 600) |> MM.grid() |> MM.by_duration() |> Enum.find(&(&1.duration_s == 60))
 
       assert effort.avg_hr == 150
     end
@@ -63,7 +69,10 @@ defmodule Soleus.MeanMaximalTest do
       # sans mesure doivent etre interpolees et non comptees comme des zeros,
       # sinon la FC moyenne se divise par le pas d'echantillonnage.
       effort =
-        constant(4.0, 600, 4) |> MM.grid() |> MM.by_duration() |> Enum.find(&(&1.duration_s == 60))
+        constant(4.0, 600, 4)
+        |> MM.grid()
+        |> MM.by_duration()
+        |> Enum.find(&(&1.duration_s == 60))
 
       assert effort.avg_hr == 150
     end

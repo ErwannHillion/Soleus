@@ -29,7 +29,9 @@ defmodule SoleusWeb.CoreComponents do
   use Phoenix.Component
   use Gettext, backend: SoleusWeb.Gettext
 
+  alias Phoenix.HTML.Form
   alias Phoenix.LiveView.JS
+  alias Phoenix.LiveView.LiveStream
 
   @doc """
   Renders flash notices.
@@ -208,7 +210,7 @@ defmodule SoleusWeb.CoreComponents do
   def input(%{type: "checkbox"} = assigns) do
     assigns =
       assign_new(assigns, :checked, fn ->
-        Phoenix.HTML.Form.normalize_value("checkbox", assigns[:value])
+        Form.normalize_value("checkbox", assigns[:value])
       end)
 
     ~H"""
@@ -362,8 +364,12 @@ defmodule SoleusWeb.CoreComponents do
 
   def table(assigns) do
     assigns =
-      with %{rows: %Phoenix.LiveView.LiveStream{}} <- assigns do
-        assign(assigns, row_id: assigns.row_id || fn {id, _item} -> id end)
+      case assigns do
+        %{rows: %LiveStream{}} ->
+          assign(assigns, row_id: assigns.row_id || fn {id, _item} -> id end)
+
+        _other ->
+          assigns
       end
 
     ~H"""

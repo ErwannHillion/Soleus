@@ -77,7 +77,10 @@ defmodule Soleus.Analytics.Decoupling do
 
   defp efficiency(pairs) do
     n = length(pairs)
-    {sum_speed, sum_hr} = Enum.reduce(pairs, {0.0, 0.0}, fn {s, h}, {as, ah} -> {as + s, ah + h} end)
+
+    {sum_speed, sum_hr} =
+      Enum.reduce(pairs, {0.0, 0.0}, fn {s, h}, {as, ah} -> {as + s, ah + h} end)
+
     mean_hr = sum_hr / n
 
     if mean_hr > 0, do: sum_speed / n / mean_hr

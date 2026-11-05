@@ -1,105 +1,149 @@
-/* See the Tailwind configuration guide for advanced usage
-   https://tailwindcss.com/docs/configuration */
-
 @import "tailwindcss" source(none);
 @import "phoenix-colocated/soleus/colocated.css";
 @source "../css";
 @source "../js";
 @source "../../lib/soleus_web";
-/* Required for Tailwind to automatically pick up changes in colocated CSS files in dev */
 @source "../../_build/dev/phoenix-colocated/soleus/*/";
 
-/* A Tailwind plugin that makes "hero-#{ICON}" classes available.
-   The heroicons installation itself is managed by your mix.exs */
 @plugin "../vendor/heroicons";
 
-/* daisyUI Tailwind Plugin. */
-@plugin "daisyui/packages/bundle/daisyui" {
-  themes: false;
+/* ---------------------------------------------------------------------------
+   Soleus — jetons de design
+
+   Interface dense et sombre, pensee comme un instrument de mesure et non comme
+   une page d'accueil. Les trois regles qui tiennent l'ensemble :
+
+     1. le violet est une couleur de signal, pas un fond. Il marque la donnee
+        principale (charge chronique, vitesse critique) et rien d'autre ;
+     2. tous les chiffres sont en chasse fixe et en `tabular-nums`, pour qu'une
+        colonne de valeurs s'aligne et se compare d'un coup d'oeil ;
+     3. les separations sont des filets d'un pixel, jamais des ombres. Une
+        ombre portee suggere de la profondeur, ce qui n'a aucun sens sur un
+        tableau de chiffres.
+--------------------------------------------------------------------------- */
+
+@theme {
+  --color-ink: #07070a;
+  --color-panel: #0e0e13;
+  --color-panel-raised: #14141b;
+  --color-line: #1f1f29;
+  --color-line-bright: #2e2e3b;
+
+  --color-text: #e9e9f0;
+  --color-dim: #8d8d9e;
+  --color-faint: #5c5c6d;
+
+  /* Violet de signal, et ses deux declinaisons utiles : une version saturee
+     pour les traits, une tres diluee pour les aplats. */
+  --color-signal: #7c5cff;
+  --color-signal-deep: #5a3fd6;
+  --color-signal-wash: #1a1533;
+
+  /* Fatigue en ambre, forme en menthe, alerte en rose. Trois teintes, pas
+     plus : au dela, un graphe a plusieurs series devient illisible. */
+  --color-fatigue: #ff9f45;
+  --color-form: #35e0a1;
+  --color-alert: #ff5470;
+
+  --font-sans: "Inter var", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
 }
 
-/* daisyUI theme plugin.
-  We ship with two themes, a light one inspired on Phoenix colors and a dark one inspired
-  on Elixir colors. Build your own at: https://daisyui.com/theme-generator/ */
-@plugin "daisyui/packages/bundle/daisyui-theme" {
-  name: "dark";
-  default: false;
-  prefersdark: true;
-  color-scheme: "dark";
-  --color-base-100: oklch(30.33% 0.016 252.42);
-  --color-base-200: oklch(25.26% 0.014 253.1);
-  --color-base-300: oklch(20.15% 0.012 254.09);
-  --color-base-content: oklch(97.807% 0.029 256.847);
-  --color-primary: oklch(58% 0.233 277.117);
-  --color-primary-content: oklch(96% 0.018 272.314);
-  --color-secondary: oklch(58% 0.233 277.117);
-  --color-secondary-content: oklch(96% 0.018 272.314);
-  --color-accent: oklch(60% 0.25 292.717);
-  --color-accent-content: oklch(96% 0.016 293.756);
-  --color-neutral: oklch(37% 0.044 257.287);
-  --color-neutral-content: oklch(98% 0.003 247.858);
-  --color-info: oklch(58% 0.158 241.966);
-  --color-info-content: oklch(97% 0.013 236.62);
-  --color-success: oklch(60% 0.118 184.704);
-  --color-success-content: oklch(98% 0.014 180.72);
-  --color-warning: oklch(66% 0.179 58.318);
-  --color-warning-content: oklch(98% 0.022 95.277);
-  --color-error: oklch(58% 0.253 17.585);
-  --color-error-content: oklch(96% 0.015 12.422);
-  --radius-selector: 0.25rem;
-  --radius-field: 0.25rem;
-  --radius-box: 0.5rem;
-  --size-selector: 0.21875rem;
-  --size-field: 0.21875rem;
-  --border: 1.5px;
-  --depth: 1;
-  --noise: 0;
+@layer base {
+  html {
+    background-color: var(--color-ink);
+    color-scheme: dark;
+  }
+
+  body {
+    background-color: var(--color-ink);
+    color: var(--color-text);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Toute valeur numerique passe par la chasse fixe. Les chiffres doivent
+     s'empiler exactement, sinon comparer deux lignes d'un tableau demande de
+     lire au lieu de regarder. */
+  .num {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
+  }
+
+  ::selection {
+    background-color: var(--color-signal-deep);
+    color: #fff;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: var(--color-ink);
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-line-bright);
+    border: 3px solid var(--color-ink);
+    border-radius: 999px;
+  }
 }
 
-@plugin "daisyui/packages/bundle/daisyui-theme" {
-  name: "light";
-  default: true;
-  prefersdark: false;
-  color-scheme: "light";
-  --color-base-100: oklch(98% 0 0);
-  --color-base-200: oklch(96% 0.001 286.375);
-  --color-base-300: oklch(92% 0.004 286.32);
-  --color-base-content: oklch(21% 0.006 285.885);
-  --color-primary: oklch(70% 0.213 47.604);
-  --color-primary-content: oklch(98% 0.016 73.684);
-  --color-secondary: oklch(55% 0.027 264.364);
-  --color-secondary-content: oklch(98% 0.002 247.839);
-  --color-accent: oklch(0% 0 0);
-  --color-accent-content: oklch(100% 0 0);
-  --color-neutral: oklch(44% 0.017 285.786);
-  --color-neutral-content: oklch(98% 0 0);
-  --color-info: oklch(62% 0.214 259.815);
-  --color-info-content: oklch(97% 0.014 254.604);
-  --color-success: oklch(70% 0.14 182.503);
-  --color-success-content: oklch(98% 0.014 180.72);
-  --color-warning: oklch(66% 0.179 58.318);
-  --color-warning-content: oklch(98% 0.022 95.277);
-  --color-error: oklch(58% 0.253 17.585);
-  --color-error-content: oklch(96% 0.015 12.422);
-  --radius-selector: 0.25rem;
-  --radius-field: 0.25rem;
-  --radius-box: 0.5rem;
-  --size-selector: 0.21875rem;
-  --size-field: 0.21875rem;
-  --border: 1.5px;
-  --depth: 1;
-  --noise: 0;
+@layer components {
+  /* Micro-libelle : la legende d'une valeur, jamais un titre. Capitales,
+     interlettrage ouvert, et assez petit pour ne pas concurrencer le chiffre
+     qu'il annonce. */
+  .label {
+    font-size: 0.625rem;
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--color-faint);
+  }
+
+  .panel {
+    background-color: var(--color-panel);
+    border: 1px solid var(--color-line);
+  }
+
+  /* Le filet superieur en violet marque le panneau qui porte la donnee
+     principale de sa rangee. Un seul par rangee : c'est ce qui en fait un
+     accent plutot qu'une decoration. */
+  .panel-signal {
+    box-shadow: inset 0 1px 0 0 var(--color-signal);
+  }
+
+  .rule {
+    border-color: var(--color-line);
+  }
+
+  /* Lignes de tableau : le survol eclaire la ligne entiere, sans deplacement
+     ni changement de taille. Un tableau de donnees ne doit pas bouger quand on
+     le parcourt du regard. */
+  .row-hover {
+    transition: background-color 120ms ease;
+  }
+
+  .row-hover:hover {
+    background-color: var(--color-panel-raised);
+  }
+
+  .chip {
+    font-size: 0.625rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 0.125rem 0.375rem;
+    border: 1px solid var(--color-line-bright);
+    color: var(--color-dim);
+  }
+
+  .chip-signal {
+    border-color: var(--color-signal-deep);
+    background-color: var(--color-signal-wash);
+    color: var(--color-signal);
+  }
 }
-
-/* Add variants based on LiveView classes */
-@custom-variant phx-click-loading (.phx-click-loading&, .phx-click-loading &);
-@custom-variant phx-submit-loading (.phx-submit-loading&, .phx-submit-loading &);
-@custom-variant phx-change-loading (.phx-change-loading&, .phx-change-loading &);
-
-/* Use the data attribute for dark mode  */
-@custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
-
-/* Make LiveView wrapper divs transparent for layout */
-[data-phx-session], [data-phx-teleported-src] { display: contents }
-
-/* This file is for your main application CSS */

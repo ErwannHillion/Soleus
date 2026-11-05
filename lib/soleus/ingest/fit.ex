@@ -124,11 +124,17 @@ defmodule Soleus.Ingest.Fit do
            elapsed_time_s: elapsed(session, series),
            elevation_gain_m: elevation_gain(session, series),
            calories: num(session, "total_calories") |> round_or_nil(),
-           avg_hr: num(session, "avg_heart_rate") |> round_or_nil() || mean_of(series[:hr]) |> round_or_nil(),
-           max_hr: num(session, "max_heart_rate") |> round_or_nil() || max_of(series[:hr]) |> round_or_nil(),
+           avg_hr:
+             num(session, "avg_heart_rate") |> round_or_nil() ||
+               mean_of(series[:hr]) |> round_or_nil(),
+           max_hr:
+             num(session, "max_heart_rate") |> round_or_nil() ||
+               max_of(series[:hr]) |> round_or_nil(),
            avg_cadence: num(session, "avg_cadence") || mean_of(series[:cadence]),
            avg_speed_ms: avg_speed(session, series),
-           max_speed_ms: num(session, "enhanced_max_speed") || num(session, "max_speed") || max_of(series[:speed_ms]),
+           max_speed_ms:
+             num(session, "enhanced_max_speed") || num(session, "max_speed") ||
+               max_of(series[:speed_ms]),
            series: series,
            digest: digest
          }}
@@ -150,11 +156,9 @@ defmodule Soleus.Ingest.Fit do
     end
   end
 
+  # Le depart vient de la session quand elle existe, sinon du premier point.
   defp started_at(session, points) do
-    with nil <- datetime(session, "start_time"),
-         nil <- points |> List.first() |> datetime("timestamp") do
-      nil
-    end
+    datetime(session, "start_time") || points |> List.first() |> datetime("timestamp")
   end
 
   # -- series -----------------------------------------------------------------

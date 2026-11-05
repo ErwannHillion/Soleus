@@ -23,12 +23,18 @@ defmodule Mix.Tasks.Soleus.Rebuild do
 
   use Mix.Task
 
+  require Logger
+
   alias Soleus.{Analytics, Training}
 
   @requirements ["app.start"]
 
   @impl Mix.Task
   def run(_args) do
+    # La tache ecrit des milliers de lignes ; sa sortie doit etre son rapport et
+    # non le journal SQL de la configuration de developpement.
+    Logger.configure(level: :warning)
+
     Mix.shell().info("1/4  Metriques par seance...")
     {:ok, analyzed} = Analytics.analyze_pending()
     Mix.shell().info("     #{analyzed} seances analysees")
@@ -53,24 +59,22 @@ defmodule Mix.Tasks.Soleus.Rebuild do
   # a une progression alors que ce n'est qu'un effet de bord du demarrage.
   defp backfill_fits do
     case Training.first_activity_date() do
-      nil ->
-        0
+      nil -> 0
+      first -> fit_each_day(Date.add(first, Analytics.fit_window_days()), Date.utc_today())
+    end
+  end
 
-      first ->
-        from = Date.add(first, Analytics.fit_window_days())
-        today = Date.utc_today()
-
-        if Date.compare(from, today) == :gt do
-          0
-        else
-          Date.range(from, today)
-          |> Enum.reduce(0, fn date, count ->
-            case Analytics.fit_models("run", date) do
-              {:ok, _} -> count + 1
-              _ -> count
-            end
-          end)
-        end
+  # `Date.compare/2` et non l'operateur `>` : comparer deux `%Date{}` avec `>`
+  # suit l'ordre des termes Erlang, qui classe les cles du struct par ordre
+  # alphabetique. Le jour est donc compare avant l'annee, et le 1er janvier 2027
+  # passerait pour anterieur au 2 decembre 2026.
+  defp fit_each_day(from, today) do
+    if Date.compare(from, today) == :gt do
+      0
+    else
+      from
+      |> Date.range(today)
+      |> Enum.count(&match?({:ok, _fit}, Analytics.fit_models("run", &1)))
     end
   end
 
@@ -83,7 +87,11 @@ defmodule Mix.Tasks.Soleus.Rebuild do
 
       fit ->
         Mix.shell().info("\n--- modele du #{fit.fitted_on} ---")
-        Mix.shell().info("vitesse critique  #{fmt(fit.cs_ms)} m/s  (#{Pace.format(fit.cs_ms)} /km)")
+
+        Mix.shell().info(
+          "vitesse critique  #{fmt(fit.cs_ms)} m/s  (#{Pace.format(fit.cs_ms)} /km)"
+        )
+
         Mix.shell().info("reserve D'        #{fmt(fit.d_prime_m)} m")
         Mix.shell().info("R2                #{fmt(fit.r2)}")
         Mix.shell().info("VDOT              #{fmt(fit.vdot)}")

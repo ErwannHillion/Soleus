@@ -30,7 +30,15 @@ defmodule Soleus.Training.BestEffort do
 
   def changeset(effort, attrs) do
     effort
-    |> cast(attrs, [:activity_id, :kind, :duration_s, :distance_m, :speed_ms, :avg_hr, :started_at])
+    |> cast(attrs, [
+      :activity_id,
+      :kind,
+      :duration_s,
+      :distance_m,
+      :speed_ms,
+      :avg_hr,
+      :started_at
+    ])
     |> validate_required([:activity_id, :kind, :duration_s, :distance_m, :speed_ms, :started_at])
     |> validate_inclusion(:kind, @kinds)
     |> validate_number(:duration_s, greater_than: 0)

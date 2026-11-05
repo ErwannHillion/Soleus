@@ -19,10 +19,43 @@ defmodule Soleus.Analytics.MeanMaximal do
 
   # Paliers de duree, resserres en bas : c'est la ou la courbe vitesse-duree
   # est la plus informative pour separer vitesse pure et endurance.
-  @durations [5, 10, 15, 20, 30, 45, 60, 90, 120, 180, 240, 300, 420, 600, 900, 1200, 1800, 2700, 3600, 5400, 7200]
+  @durations [
+    5,
+    10,
+    15,
+    20,
+    30,
+    45,
+    60,
+    90,
+    120,
+    180,
+    240,
+    300,
+    420,
+    600,
+    900,
+    1200,
+    1800,
+    2700,
+    3600,
+    5400,
+    7200
+  ]
 
   # Distances de course, de la ligne droite au marathon.
-  @distances [400.0, 800.0, 1000.0, 1609.34, 3000.0, 5000.0, 10_000.0, 15_000.0, 21_097.5, 42_195.0]
+  @distances [
+    400.0,
+    800.0,
+    1000.0,
+    1609.34,
+    3000.0,
+    5000.0,
+    10_000.0,
+    15_000.0,
+    21_097.5,
+    42_195.0
+  ]
 
   # Au dela de cet ecart entre deux points, on considere que la montre etait
   # en pause et non que l'athlete a couru sans etre enregistre. La distance
@@ -139,20 +172,23 @@ defmodule Soleus.Analytics.MeanMaximal do
   end
 
   defp scan_distance(grid, target) do
-    Enum.reduce_while(0..(grid.size - 1), {0, nil}, fn finish, {start, best} ->
+    Enum.reduce(0..(grid.size - 1), {0, nil}, fn finish, {start, best} ->
       start = advance(grid, start, finish, target)
 
-      best =
-        if elem(grid.distance, finish) - elem(grid.distance, start) >= target do
-          candidate = {finish - start, start}
-          if best == nil or elem(candidate, 0) < elem(best, 0), do: candidate, else: best
-        else
-          best
-        end
-
-      {:cont, {start, best}}
+      {start, keep_shortest(grid, start, finish, target, best)}
     end)
     |> elem(1)
+  end
+
+  defp keep_shortest(grid, start, finish, target, best) do
+    covered = elem(grid.distance, finish) - elem(grid.distance, start)
+
+    cond do
+      covered < target -> best
+      best == nil -> {finish - start, start}
+      finish - start < elem(best, 0) -> {finish - start, start}
+      true -> best
+    end
   end
 
   # Fait glisser le debut de fenetre tant que la distance cible reste couverte,
@@ -214,21 +250,15 @@ defmodule Soleus.Analytics.MeanMaximal do
     if to < from do
       {acc, next, v1}
     else
-      acc =
-        Enum.reduce(from..to, acc, fn s, a ->
-          value =
-            cond do
-              paused? -> v0
-              span <= 0 -> v1
-              true -> v0 + (v1 - v0) * (s - t0) / span
-            end
-
-          [value | a]
-        end)
+      acc = Enum.reduce(from..to, acc, &[at_second(&1, t0, v0, v1, span, paused?) | &2])
 
       {acc, to + 1, v1}
     end
   end
+
+  defp at_second(_second, _t0, v0, _v1, _span, true), do: v0
+  defp at_second(_second, _t0, _v0, v1, span, _paused?) when span <= 0, do: v1
+  defp at_second(second, t0, v0, v1, span, _paused?), do: v0 + (v1 - v0) * (second - t0) / span
 
   # Sommes prefixes de FC : `hr_prefix[i]` est la somme des FC de la seconde 0
   # a i-1, ce qui rend la moyenne d'une fenetre independante de sa longueur.

@@ -17,7 +17,7 @@ defmodule SoleusWeb.Router do
   scope "/", SoleusWeb do
     pipe_through :browser
 
-    get "/", PageController, :home
+    live "/", DashboardLive, :index
   end
 
   # Other scopes may use custom stacks.

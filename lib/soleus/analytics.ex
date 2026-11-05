@@ -16,7 +16,18 @@ defmodule Soleus.Analytics do
 
   import Ecto.Query
 
-  alias Soleus.Analytics.{CriticalSpeed, DailyLoad, Decoupling, Endurance, Load, ModelFit, Pace, Regression, Vdot}
+  alias Soleus.Analytics.{
+    CriticalSpeed,
+    DailyLoad,
+    Decoupling,
+    Endurance,
+    Load,
+    ModelFit,
+    Pace,
+    Regression,
+    Vdot
+  }
+
   alias Soleus.Repo
   alias Soleus.Training
 
@@ -28,6 +39,20 @@ defmodule Soleus.Analytics do
 
   # Les distances pour lesquelles on publie une prediction.
   @race_distances [1500.0, 3000.0, 5000.0, 10_000.0, 21_097.5, 42_195.0]
+
+  # Colonnes reecrites par la reconstruction de la serie de charge. La date est
+  # la cle du conflit et reste donc en dehors.
+  @daily_load_columns [
+    :load,
+    :distance_m,
+    :moving_time_s,
+    :activity_count,
+    :ctl,
+    :atl,
+    :tsb,
+    :ramp_rate,
+    :updated_at
+  ]
 
   def fit_window_days, do: @fit_window_days
   def race_distances, do: @race_distances
@@ -125,7 +150,7 @@ defmodule Soleus.Analytics do
 
         {count, _} =
           Repo.insert_all(DailyLoad, rows,
-            on_conflict: {:replace, [:load, :distance_m, :moving_time_s, :activity_count, :ctl, :atl, :tsb, :ramp_rate, :updated_at]},
+            on_conflict: {:replace, @daily_load_columns},
             conflict_target: [:date]
           )
 
@@ -410,10 +435,29 @@ defmodule Soleus.Analytics do
 
   defp resolve_goal(trend, latest, distance_m, goal_time_s, horizon) do
     today = Date.utc_today()
-    offset_today = Date.diff(today, trend.origin)
 
-    cs_at = fn days -> trend.intercept + trend.slope * (offset_today + days) end
-    time_at = fn cs -> if cs > 0, do: (distance_m - latest.d_prime_m) / cs end
+    # Le jour 0 vaut exactement la vitesse critique du dernier ajustement, et
+    # non la valeur que la droite de tendance prend aujourd'hui. La tendance ne
+    # sert qu'a fournir la pente.
+    #
+    # Sans cet ancrage, la droite passe legerement a cote du dernier point et
+    # la projection annonce "deja atteint" un objectif que le tableau des
+    # predictions, juste a cote, affiche comme non atteint. Deux chiffres qui se
+    # contredisent a l'ecran coutent plus cher que la precision theorique
+    # gagnee en gardant l'ordonnee de la regression.
+    cs_at = fn days -> latest.cs_ms + trend.slope * days end
+
+    # Exactement la meme cascade que `predictions/3`, et non le modele de
+    # vitesse critique brut. Les faire diverger est ce qui faisait annoncer
+    # "10 km sous 50 minutes deja atteint" pendant que le tableau des
+    # predictions affichait 51:14 sur la meme ligne.
+    exponent = latest.endurance_exponent || @literature_exponent
+
+    time_at = fn cs ->
+      if cs > 0 do
+        predict_distance(distance_m, %{cs_ms: cs, d_prime_m: latest.d_prime_m}, exponent, [])
+      end
+    end
 
     current = time_at.(cs_at.(0))
 
@@ -422,13 +466,15 @@ defmodule Soleus.Analytics do
         {:error, :no_model}
 
       current <= goal_time_s ->
-        {:ok, built(:already_reached, 0, today, current, trend, cs_at.(0), distance_m, goal_time_s)}
+        {:ok,
+         built(:already_reached, 0, today, current, trend, cs_at.(0), distance_m, goal_time_s)}
 
       trend.slope <= 0 ->
         {:error, :no_progression}
 
       true ->
-        case Enum.find(1..horizon, fn d -> time_at.(cs_at.(d)) <= goal_time_s end) do
+        first_day_reaching(horizon, cs_at, time_at, goal_time_s)
+        |> case do
           nil ->
             {:error, :beyond_horizon}
 
@@ -446,6 +492,13 @@ defmodule Soleus.Analytics do
              )}
         end
     end
+  end
+
+  # Balayage jour par jour plutot qu'une inversion analytique : la cascade de
+  # prediction n'est pas inversible en forme fermee, puisqu'elle change de
+  # modele selon la duree obtenue.
+  defp first_day_reaching(horizon, cs_at, time_at, goal_time_s) do
+    Enum.find(1..horizon, fn day -> time_at.(cs_at.(day)) <= goal_time_s end)
   end
 
   defp built(status, days, date, predicted, trend, cs, distance_m, goal_time_s) do
@@ -485,6 +538,52 @@ defmodule Soleus.Analytics do
     end
   end
 
+  @doc """
+  Objectifs ronds juste sous les performances actuellement predites, dates.
+
+  Plutot que de demander a l'athlete de saisir un objectif pour decouvrir une
+  date, on prend le prochain palier rond de chaque distance et on le date
+  directement. "Dix kilometres sous cinquante minutes" est la question que les
+  gens se posent vraiment, et elle se deduit des predictions.
+  """
+  @spec next_goals(String.t()) :: [map()]
+  def next_goals(sport \\ "run") do
+    case current_fit(sport) do
+      %ModelFit{predictions: predictions} when map_size(predictions) > 0 ->
+        predictions
+        |> Enum.sort_by(fn {d, _} -> String.to_integer(d) end)
+        |> Enum.map(fn {distance, predicted} ->
+          target = round_down(predicted)
+
+          {String.to_integer(distance) * 1.0, target,
+           project(String.to_integer(distance) * 1.0, target, sport: sport)}
+        end)
+        |> Enum.map(fn {distance, target, result} ->
+          %{distance_m: distance, goal_time_s: target, result: result}
+        end)
+
+      _ ->
+        []
+    end
+  end
+
+  # Paliers ronds, cales sur la facon dont les coureurs parlent : la demi-minute
+  # sur un 5 000 m, la minute sur un 10 km, cinq minutes sur un semi. Un
+  # objectif a 51:07 ne veut rien dire pour personne, mais un palier trop large
+  # non plus : viser 20:00 quand on predit 24:34 n'est pas un objectif, c'est
+  # une autre saison.
+  defp round_down(seconds) do
+    step =
+      cond do
+        seconds < 1200 -> 30
+        seconds < 3600 -> 60
+        seconds < 7200 -> 300
+        true -> 600
+      end
+
+    floor(seconds / step) * step * 1.0
+  end
+
   @doc "Raison lisible d'une projection impossible."
   def explain_error(:not_enough_history),
     do: "Pas encore assez d'historique — il faut environ un mois d'ajustements."
@@ -493,6 +592,68 @@ defmodule Soleus.Analytics do
   def explain_error(:no_progression), do: "Aucune progression mesurable sur la periode."
   def explain_error(:beyond_horizon), do: "L'objectif est hors de portee a six mois."
   def explain_error(_other), do: "Projection indisponible."
+
+  # -- assemblage pour l'interface ---------------------------------------------
+
+  @doc """
+  Rassemble en une passe tout ce qu'affiche le tableau de bord.
+
+  Regroupe ici plutot que dans la vue : une dizaine de requetes dispersees dans
+  un `mount` rendrait impossible de voir ce que coute l'affichage, et la vue
+  n'a pas a connaitre la forme du schema.
+  """
+  @spec dashboard(String.t()) :: map()
+  def dashboard(sport \\ "run") do
+    today = Date.utc_today()
+    fit = current_fit(sport)
+
+    %{
+      sport: sport,
+      today: today,
+      form: current_form(),
+      load_days: load_series(180),
+      fit: fit,
+      cs: cs_of(fit),
+      fits: fit_history(sport, 365),
+      curve: Training.best_effort_curve(sport, Date.add(today, -@fit_window_days), today),
+      bests: Training.personal_bests(sport),
+      recent: Training.list_activities(sport: sport, limit: 10),
+      goals: next_goals(sport),
+      weeks: week_summary(),
+      paces: fit && fit.vdot && Vdot.training_speeds(fit.vdot)
+    }
+  end
+
+  @doc "Volume des deux dernieres semaines, pour les comparer."
+  @spec week_summary() :: %{current: map(), previous: map()}
+  def week_summary do
+    today = Date.utc_today()
+    # Lundi de la semaine en cours : `day_of_week/1` rend 1 pour lundi.
+    monday = Date.add(today, -(Date.day_of_week(today) - 1))
+
+    %{
+      current: totals_between(monday, today),
+      previous: totals_between(Date.add(monday, -7), Date.add(monday, -1))
+    }
+  end
+
+  defp totals_between(from, to) do
+    Repo.one(
+      from d in DailyLoad,
+        where: d.date >= ^from and d.date <= ^to,
+        select: %{
+          distance_m: coalesce(sum(d.distance_m), 0.0),
+          moving_time_s: coalesce(sum(d.moving_time_s), 0),
+          load: coalesce(sum(d.load), 0.0),
+          activity_count: coalesce(sum(d.activity_count), 0)
+        }
+    ) || %{distance_m: 0.0, moving_time_s: 0, load: 0.0, activity_count: 0}
+  end
+
+  defp cs_of(%ModelFit{cs_ms: cs, d_prime_m: d, r2: r2}) when is_number(cs) and is_number(d),
+    do: %{cs_ms: cs, d_prime_m: d, r2: r2 || 1.0, sample_count: 0}
+
+  defp cs_of(_fit), do: nil
 
   # -- utilitaires ------------------------------------------------------------
 

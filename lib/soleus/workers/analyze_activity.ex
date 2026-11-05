@@ -28,9 +28,13 @@ defmodule Soleus.Workers.AnalyzeActivity do
           nil
       end
 
-    with {:ok, _activity} <- Analytics.analyze_activity(activity, athlete, cs) do
-      %{} |> RebuildLoads.new() |> Oban.insert()
-      :ok
+    case Analytics.analyze_activity(activity, athlete, cs) do
+      {:ok, _activity} ->
+        %{} |> RebuildLoads.new() |> Oban.insert()
+        :ok
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 end

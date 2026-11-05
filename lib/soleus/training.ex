@@ -28,14 +28,16 @@ defmodule Soleus.Training do
   @spec import_fit(Path.t(), keyword()) ::
           {:ok, :imported | :already_imported, Activity.t()} | {:error, term()}
   def import_fit(path, opts \\ []) do
-    with {:ok, decoded} <- Fit.decode(path) do
-      case Repo.get_by(Activity, fit_digest: decoded.digest) do
-        %Activity{} = existing ->
-          {:ok, :already_imported, existing}
+    case Fit.decode(path) do
+      {:ok, decoded} -> import_decoded(decoded, path, opts)
+      {:error, reason} -> {:error, reason}
+    end
+  end
 
-        nil ->
-          persist(decoded, path, opts)
-      end
+  defp import_decoded(decoded, path, opts) do
+    case Repo.get_by(Activity, fit_digest: decoded.digest) do
+      %Activity{} = existing -> {:ok, :already_imported, existing}
+      nil -> persist(decoded, path, opts)
     end
   end
 

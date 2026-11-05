@@ -58,13 +58,6 @@ defmodule Soleus.MixProject do
        app: false,
        compile: false,
        depth: 1},
-      {:daisyui,
-       github: "saadeghi/daisyui",
-       tag: "v5.5.20",
-       sparse: "packages/bundle",
-       app: false,
-       compile: false,
-       depth: 1},
       {:swoosh, "~> 1.16"},
       {:req, "~> 0.5"},
       {:telemetry_metrics, "~> 1.0"},
@@ -76,7 +69,11 @@ defmodule Soleus.MixProject do
 
       # Ingestion et travaux de fond
       {:oban, "~> 2.24"},
-      {:fit_file, "~> 0.1.4"}
+      {:fit_file, "~> 0.1.4"},
+
+      # Qualite de code. Les dix checks maison vivent dans `.credo/` et sont
+      # charges par `requires:` dans `.credo.exs`.
+      {:credo, "~> 1.7", only: [:dev, :test], runtime: false}
     ]
   end
 
