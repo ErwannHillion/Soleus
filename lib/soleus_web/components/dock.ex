@@ -24,6 +24,7 @@ defmodule SoleusWeb.Dock do
     %{action: :curve, path: "/courbe", icon: "hero-presentation-chart-line", label: "Courbe"},
     %{action: :body, path: "/corps", icon: "hero-heart", label: "Corps"},
     %{action: :compare, path: "/compare", icon: "hero-scale", label: "Comparer"},
+    %{action: :plan, path: "/plan", icon: "hero-map", label: "Plan"},
     %{action: :predictions, path: "/predictions", icon: "hero-flag", label: "Predictions"}
   ]
 

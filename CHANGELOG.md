@@ -56,6 +56,11 @@ fichier, au format [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
   avec l'avancement en direct, et rattrapage automatique au démarrage de
   l'application
 
+- Page `Plan` : plan d'entraînement vers une course datée, à partir d'une
+  distance, d'un dénivelé et d'un temps cible facultatif. Verdict de
+  faisabilité, objectif déduit de la forme quand aucun n'est saisi, et séances
+  datées avec leur structure et leurs allures
+
 ### Fixed
 
 - FC moyenne des efforts records sur les fichiers à enregistrement intelligent :
@@ -90,3 +95,7 @@ fichier, au format [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 - Les distances de la comparaison s'affichaient en mètres
 - L'échelle des barres de portions va de la plus lente à la plus rapide : sur
   une sortie régulière, rapportées à zéro, elles étaient toutes identiques
+- Une date de course passée faisait planter la page Plan : `max(-1.0, 0)` rend
+  l'entier `0`, que `Float.floor/2` refuse
+- La tendance de vitesse critique est désormais calculée à un seul endroit :
+  la projection d'objectif et le plan en donnaient deux valeurs différentes

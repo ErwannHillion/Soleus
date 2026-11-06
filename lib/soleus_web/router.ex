@@ -23,6 +23,7 @@ defmodule SoleusWeb.Router do
     live "/courbe", DashboardLive, :curve
     live "/corps", DashboardLive, :body
     live "/compare", DashboardLive, :compare
+    live "/plan", PlanLive, :index
     live "/seance/:id", ActivityLive, :show
     live "/predictions", DashboardLive, :predictions
   end

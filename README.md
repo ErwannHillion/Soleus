@@ -145,10 +145,30 @@ projection n'a aucune pente a extrapoler.
 | Corps | schema corporel, mesures de sante, sommeil, comparaison |
 | Comparer | deux periodes arbitraires cote a cote |
 | Predictions | modele, temps predits, objectifs dates |
+| Plan | plan d'entrainement vers une course datee |
 
 Tous les graphiques se lisent au survol. La periode se choisit en haut a
 droite, et une zone se definit directement au curseur sur le graphique de
 charge.
+
+## Le plan d'entrainement
+
+La page `Plan` prend une date, une distance, un denivele et un temps cible
+facultatif, et rend une trame de seances.
+
+Tout ce qu'elle propose decoule de quatre chiffres mesures : la charge
+actuelle, le rythme de seances reel des huit dernieres semaines, les allures
+derivees de la vitesse critique, et un taux de montee en charge borne par la
+regle des dix pour cent **et** par un plafond de doublement sur le cycle.
+
+Ce n'est pas un entraineur. Le plan ne sait rien du sommeil a venir, des
+contraintes professionnelles ni des antecedents de blessure. L'interface le
+dit, et le code aussi (`Soleus.Coaching.Plan`).
+
+Quand le temps cible est hors de portee, la page l'annonce, chiffre le nombre
+de semaines qu'il faudrait, et construit le plan vers le temps **reellement**
+atteignable : s'entrainer a une allure qu'on ne tiendra pas le jour J est le
+meilleur moyen de rater la course.
 
 ## Notes de conception
 

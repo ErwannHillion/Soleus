@@ -405,7 +405,7 @@ defmodule Soleus.Analytics do
     horizon = Keyword.get(opts, :horizon_days, 180)
     history = fit_history(sport, Keyword.get(opts, :lookback_days, 365))
 
-    with {:ok, trend} <- cs_trend(history),
+    with {:ok, trend} <- trend_of(history),
          %ModelFit{} = latest <- current_fit(sport),
          true <- is_number(latest.d_prime_m) do
       resolve_goal(trend, latest, distance_m, goal_time_s, horizon)
@@ -417,12 +417,29 @@ defmodule Soleus.Analytics do
     end
   end
 
+  @doc """
+  Tendance de la vitesse critique, en m/s par jour.
+
+  Expose publiquement parce que deux fonctionnalites en dependent — la
+  projection d'objectif et le plan d'entrainement — et que les laisser
+  calculer chacune la leur produirait deux rythmes de progression differents
+  affiches dans la meme application.
+
+  La pente vient des moindres carres sur tout l'historique, et non de l'ecart
+  entre le premier et le dernier point : deux extremites bruitees suffiraient
+  a inventer une progression que le nuage ne montre pas.
+  """
+  @spec cs_trend(String.t(), pos_integer()) :: {:ok, map()} | :error
+  def cs_trend(sport \\ "run", lookback_days \\ 365) do
+    sport |> fit_history(lookback_days) |> trend_of()
+  end
+
   # Au moins six ajustements etales sur quatre semaines. En dessous, la pente
   # se calcule sur du bruit : deux semaines d'affilee avec une seule seance de
   # qualite suffisent a faire croire a une progression fulgurante.
-  defp cs_trend(history) when length(history) < 6, do: :error
+  defp trend_of(history) when length(history) < 6, do: :error
 
-  defp cs_trend(history) do
+  defp trend_of(history) do
     first = hd(history).fitted_on
 
     if Date.diff(List.last(history).fitted_on, first) < 28 do
