@@ -36,6 +36,9 @@ defmodule SoleusWeb.Charts do
   alias Soleus.Analytics.CriticalSpeed
   alias Soleus.Analytics.Pace
 
+  # Noms de mois abreges, partages par les axes et le calendrier.
+  @months ~w(janv. fevr. mars avr. mai juin juil. aout sept. oct. nov. dec.)
+
   # -- cadre de survol ---------------------------------------------------------
 
   attr :id, :string, required: true
@@ -709,6 +712,237 @@ defmodule SoleusWeb.Charts do
     {x.(date), y.(value)}
   end
 
+  # -- repartition en zones -----------------------------------------------------
+
+  attr :zones, :list, required: true, doc: "six durees en secondes, de la zone 0 a la zone 5"
+  attr :floors, :list, default: nil, doc: "planchers des zones 1 a 5, en battements"
+  attr :class, :string, default: nil
+
+  @zone_colors [
+    "var(--color-line-bright)",
+    "var(--color-form)",
+    "var(--color-signal-deep)",
+    "var(--color-signal)",
+    "var(--color-fatigue)",
+    "var(--color-alert)"
+  ]
+
+  @doc """
+  Repartition du temps par zone de frequence cardiaque, en une barre.
+
+  Une barre empilee horizontale plutot que six colonnes : ce qu'on lit, c'est
+  une **proportion**, et une barre unique la donne sans que l'oeil ait a
+  additionner. Les zones sont par nature exhaustives — tout le temps de
+  course tombe dans l'une d'elles — ce qui est exactement le cas ou
+  l'empilement dit la verite.
+
+  La separation entre la zone 2 et la zone 3 est marquee : c'est la frontiere
+  du modele polarise, et la seule que l'oeil doit trouver sans compter.
+  """
+  def zone_bar(assigns) do
+    zones = assigns.zones
+    total = Enum.sum(zones)
+
+    if total == 0 do
+      empty_chart(assigns)
+    else
+      segments =
+        zones
+        |> Enum.with_index()
+        |> Enum.map(fn {seconds, index} ->
+          %{
+            index: index,
+            seconds: seconds,
+            share: seconds / total * 100,
+            color: Enum.at(@zone_colors, index),
+            floor: assigns.floors && Enum.at(assigns.floors, index - 1)
+          }
+        end)
+        |> Enum.reject(&(&1.share < 0.3))
+
+      easy = zones |> Enum.take(3) |> Enum.sum()
+
+      assigns =
+        assigns
+        |> assign(:segments, segments)
+        |> assign(:total, total)
+        |> assign(:easy_share, easy / total * 100)
+
+      ~H"""
+      <div class={@class}>
+        <div class="flex h-7 w-full overflow-hidden">
+          <div
+            :for={segment <- @segments}
+            class="group relative h-full"
+            style={"width: #{Float.round(segment.share, 2)}%; background-color: #{segment.color}; opacity: 0.85"}
+            title={"Zone #{segment.index} · #{Pace.format_duration(segment.seconds)} · #{round(segment.share)} %"}
+          >
+          </div>
+        </div>
+
+        <div class="mt-3 grid grid-cols-2 gap-x-6 gap-y-1.5 sm:grid-cols-3 lg:grid-cols-6">
+          <div :for={segment <- @segments} class="flex items-baseline gap-2">
+            <span class="h-2 w-2 shrink-0" style={"background-color: #{segment.color}"}></span>
+            <span class="text-[10px] text-dim">
+              Z{segment.index}
+              <span :if={segment.floor} class="text-faint">
+                · {segment.floor}+
+              </span>
+            </span>
+            <span class="num ml-auto text-[11px] text-text">{round(segment.share)} %</span>
+          </div>
+        </div>
+
+        <%!-- La frontiere polarisee, rappelee en clair : c'est le seul chiffre
+              de ce bloc qui se compare a une reference. --%>
+        <p class="mt-3 text-[11px] text-faint">
+          <span class="num" style={"color: #{polar_color(@easy_share)}"}>
+            {round(@easy_share)} %
+          </span>
+          du temps en zones 0 a 2, sur {Pace.format_duration(@total)}. Le modele
+          polarise situe ce chiffre autour de 80 %.
+        </p>
+      </div>
+      """
+    end
+  end
+
+  defp polar_color(share) when share >= 70, do: "var(--color-form)"
+  defp polar_color(share) when share >= 55, do: "var(--color-fatigue)"
+  defp polar_color(_share), do: "var(--color-alert)"
+
+  # -- calendrier de charge -----------------------------------------------------
+
+  attr :days, :list, required: true, doc: "lignes de `DailyLoad`, triees"
+  attr :id, :string, default: "load-calendar"
+  attr :class, :string, default: nil
+
+  @doc """
+  Calendrier de la charge quotidienne, une colonne par semaine.
+
+  Le format revele ce qu'une courbe cache : les rythmes. Une colonne vide
+  toutes les trois semaines, un jour de la semaine systematiquement au repos,
+  un mois creux — tout cela saute aux yeux sur une grille et se perd dans une
+  serie temporelle.
+
+  L'intensite de chaque case est rapportee au **neuvieme decile** et non au
+  maximum : une seule sortie exceptionnelle ecraserait sinon toute l'echelle
+  et rendrait le reste uniformement sombre.
+  """
+  def load_calendar(assigns) do
+    days = assigns.days
+
+    if days == [] do
+      empty_chart(assigns)
+    else
+      scale_max = days |> Enum.map(&(&1.load || 0.0)) |> percentile(0.9) |> max(1.0)
+      first = List.first(days).date
+      # On remonte au lundi pour que chaque colonne soit une semaine pleine.
+      origin = Date.add(first, -(Date.day_of_week(first) - 1))
+
+      cells =
+        Enum.map(days, fn day ->
+          offset = Date.diff(day.date, origin)
+
+          %{
+            week: div(offset, 7),
+            weekday: rem(offset, 7),
+            load: day.load || 0.0,
+            intensity: min((day.load || 0.0) / scale_max, 1.0),
+            date: day.date
+          }
+        end)
+
+      weeks = (cells |> Enum.map(& &1.week) |> Enum.max()) + 1
+
+      assigns =
+        assigns
+        |> assign(:cells, cells)
+        |> assign(:weeks, weeks)
+        |> assign(:month_marks, month_marks(cells))
+        |> assign(:hover, calendar_hover(cells, weeks))
+        |> assign(:empty, false)
+
+      ~H"""
+      <.chart_frame id={@id} hover={@hover} class={@class}>
+        <svg
+          viewBox={"0 0 #{@weeks * 14 + 24} 118"}
+          style={aspect(@weeks * 14 + 24, 118)}
+          role="img"
+        >
+          <title>Calendrier de la charge</title>
+
+          <text
+            :for={{label, week} <- @month_marks}
+            x={week * 14 + 24}
+            y="10"
+            fill="var(--color-faint)"
+            font-size="8"
+            font-family="var(--font-mono)"
+          >
+            {label}
+          </text>
+
+          <text
+            :for={{label, row} <- [{"lun", 0}, {"mer", 2}, {"ven", 4}, {"dim", 6}]}
+            x="18"
+            y={row * 14 + 29}
+            text-anchor="end"
+            fill="var(--color-faint)"
+            font-size="7"
+            font-family="var(--font-mono)"
+          >
+            {label}
+          </text>
+
+          <rect
+            :for={cell <- @cells}
+            x={cell.week * 14 + 24}
+            y={cell.weekday * 14 + 18}
+            width="11"
+            height="11"
+            rx="1.5"
+            fill={if cell.load > 0, do: "var(--color-signal)", else: "var(--color-panel-raised)"}
+            fill-opacity={if cell.load > 0, do: 0.18 + cell.intensity * 0.8, else: 1}
+          />
+        </svg>
+      </.chart_frame>
+      """
+    end
+  end
+
+  defp percentile([], _p), do: 0.0
+
+  defp percentile(values, p) do
+    sorted = Enum.sort(values)
+    index = (length(sorted) - 1) * p
+    Enum.at(sorted, round(index))
+  end
+
+  defp month_marks(cells) do
+    cells
+    |> Enum.filter(&(&1.date.day <= 7 and &1.weekday == 0))
+    |> Enum.map(&{Enum.at(@months, &1.date.month - 1), &1.week})
+  end
+
+  defp calendar_hover(cells, weeks) do
+    width = weeks * 14 + 24
+
+    Enum.map(cells, fn cell ->
+      %{
+        x: percent(cell.week * 14 + 29, width),
+        label: long_date(cell.date),
+        rows: [
+          %{
+            k: "charge",
+            v: if(cell.load > 0, do: round1(cell.load), else: "repos"),
+            c: if(cell.load > 0, do: "var(--color-signal)", else: "var(--color-faint)")
+          }
+        ]
+      }
+    end)
+  end
+
   # -- sommeil empile ----------------------------------------------------------
 
   attr :id, :string, default: "sleep-chart"
@@ -1266,8 +1500,6 @@ defmodule SoleusWeb.Charts do
     |> Enum.filter(&(&1 >= d_min and &1 <= d_max))
     |> Enum.map(&{Pace.format_duration(&1), x.(&1)})
   end
-
-  @months ~w(janv. fevr. mars avr. mai juin juil. aout sept. oct. nov. dec.)
 
   # Une graduation au premier jour de chaque mois, et seulement si le graphe est
   # assez large pour que les libelles ne se chevauchent pas.

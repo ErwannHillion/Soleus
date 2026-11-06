@@ -147,6 +147,11 @@ projection n'a aucune pente a extrapoler.
 | Predictions | modele, temps predits, objectifs dates |
 | Plan | plan d'entrainement vers une course datee |
 
+L'accueil ouvre sur un panneau **A regarder** : les signaux derives des
+mesures, et rien d'autre. Un signal dit ce qu'il a vu, pas ce qu'il faut
+faire, et chaque seuil a une origine citable dans `Soleus.Signals`. Aucun
+signal est un resultat valable, pas un panneau vide.
+
 Tous les graphiques se lisent au survol. La periode se choisit en haut a
 droite, et une zone se definit directement au curseur sur le graphique de
 charge.

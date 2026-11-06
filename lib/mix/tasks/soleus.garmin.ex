@@ -88,7 +88,7 @@ defmodule Mix.Tasks.Soleus.Garmin do
 
     case SyncGarmin.perform(%Oban.Job{args: %{"window_days" => days}}) do
       :ok -> Mix.shell().info("termine. Enchainer avec : mix soleus.rebuild")
-      {:discard, reason} -> Mix.shell().error(Token.explain(reason))
+      {:cancel, reason} -> Mix.shell().error(Token.explain(reason))
       {:error, reason} -> Mix.shell().error(inspect(reason))
     end
   end

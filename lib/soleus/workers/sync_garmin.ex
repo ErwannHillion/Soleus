@@ -73,17 +73,21 @@ defmodule Soleus.Workers.SyncGarmin do
     :ok
   end
 
+  # `{:cancel, …}` et non `{:discard, …}`, qui est deprecie depuis Oban 2.14.
+  # Les deux arretent les tentatives, mais seul `:cancel` produit un etat
+  # `cancelled` distinct, que l'interface peut presenter comme « cle a
+  # verifier » plutot que comme une synchronisation reussie.
   defp fail(:api_key_rejected) do
     Logger.error(Token.explain(:api_key_rejected))
     Sync.broadcast({:sync, :failed, %{reason: :api_key_rejected}})
-    {:discard, :api_key_rejected}
+    {:cancel, :api_key_rejected}
   end
 
   # Pas une panne : la synchronisation est optionnelle, et l'import de
   # fichiers FIT fonctionne sans cle.
   defp fail(:no_api_key) do
     Sync.broadcast({:sync, :failed, %{reason: :no_api_key}})
-    {:discard, :no_api_key}
+    {:cancel, :no_api_key}
   end
 
   defp fail(reason) do

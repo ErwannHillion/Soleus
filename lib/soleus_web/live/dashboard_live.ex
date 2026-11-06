@@ -16,8 +16,10 @@ defmodule SoleusWeb.DashboardLive do
   alias Phoenix.LiveView.JS
   alias Soleus.Analytics
   alias Soleus.Analytics.{Decoupling, Load, Pace}
+  alias Soleus.Config
   alias Soleus.Health
   alias Soleus.Ingest.Garmin.Token
+  alias Soleus.Signals
   alias Soleus.Sync
   alias Soleus.Training
 
@@ -45,10 +47,24 @@ defmodule SoleusWeb.DashboardLive do
     last = Sync.last_sync()
 
     cond do
-      Sync.running?() -> %{state: :running, label: "en cours"}
-      last && last.state == "completed" -> %{state: :idle, label: sync_age(last)}
-      last && last.state == "discarded" -> %{state: :failed, label: "cle a verifier"}
-      true -> %{state: :idle, label: "jamais"}
+      # Sans cle, aucune synchronisation n'a pu aboutir, quoi qu'en dise
+      # l'historique d'Oban. Le verifier ici plutot que de se fier a l'etat du
+      # job evite d'afficher « il y a quatre minutes » apres une execution qui
+      # s'est arretee faute de cle — c'etait le cas, et c'etait trompeur.
+      is_nil(Config.garmin_api_key()) ->
+        %{state: :idle, label: "cle a configurer"}
+
+      Sync.running?() ->
+        %{state: :running, label: "en cours"}
+
+      last && last.state in ["cancelled", "discarded"] ->
+        %{state: :failed, label: "cle a verifier"}
+
+      last && last.state == "completed" ->
+        %{state: :idle, label: sync_age(last)}
+
+      true ->
+        %{state: :idle, label: "jamais"}
     end
   end
 
@@ -234,6 +250,9 @@ defmodule SoleusWeb.DashboardLive do
     |> assign(:today_health, Health.latest())
     |> assign(:health_averages, Health.averages(since, until))
     |> assign(:previous_averages, Health.averages(Date.add(since, -days), since))
+    |> assign(:signals, Signals.all(sport))
+    |> assign(:zones, Training.zone_distribution(sport, since, until))
+    |> assign(:zone_floors, Training.athlete().hr_zone_floors)
     |> assign(
       :sessions,
       Training.list_activities(sport: socket.assigns.sport_filter, since: since, limit: 200)
@@ -302,6 +321,7 @@ defmodule SoleusWeb.DashboardLive do
     ~H"""
     <div class="flex min-h-full flex-col divide-y divide-line">
       <.form_row form={@form} days={@load_days} />
+      <.signals_panel signals={@signals} />
 
       <div class="grid grid-cols-1 divide-y divide-line xl:grid-cols-12 xl:divide-x xl:divide-y-0">
         <section class="xl:col-span-8">
@@ -356,6 +376,21 @@ defmodule SoleusWeb.DashboardLive do
     <div class="flex min-h-full flex-col divide-y divide-line">
       <.form_row form={@form} days={@load_days} />
       <.load_row days={@load_days} since={@since} until={@until} selection={@selection} />
+      <div class="grid grid-cols-1 divide-y divide-line xl:grid-cols-12 xl:divide-x xl:divide-y-0">
+        <section class="xl:col-span-7">
+          <.panel_head title="Calendrier de charge" note={range_note(@since, @until, @selection)} />
+          <div class="px-5 pb-5">
+            <.load_calendar days={@load_days} class="w-full" />
+          </div>
+        </section>
+        <section class="xl:col-span-5">
+          <.panel_head title="Repartition en zones" note="frequence cardiaque" />
+          <div class="px-5 pb-5">
+            <.zone_bar zones={@zones} floors={@zone_floors} class="w-full" />
+          </div>
+        </section>
+      </div>
+
       <.overlay_panel
         mine={@my_load}
         theirs={@garmin_load}
@@ -697,6 +732,56 @@ defmodule SoleusWeb.DashboardLive do
 
   defp per_week(%{distance_m: distance, weeks: weeks}) when weeks > 0, do: distance / weeks
   defp per_week(_totals), do: nil
+
+  attr :signals, :list, required: true
+
+  # Le silence est un resultat valable : aucun signal veut dire que rien ne
+  # sort de l'ordinaire, pas que l'analyse a echoue. Le dire explicitement
+  # evite qu'un panneau vide passe pour une panne.
+  defp signals_panel(assigns) do
+    ~H"""
+    <section>
+      <.panel_head
+        title="A regarder"
+        note={if @signals == [], do: "rien a signaler", else: "#{length(@signals)} signal(aux)"}
+      />
+
+      <div
+        :if={@signals != []}
+        class="grid grid-cols-1 gap-px border-t border-line bg-line lg:grid-cols-2 2xl:grid-cols-3"
+      >
+        <article :for={signal <- @signals} class="row-hover bg-ink px-5 py-4">
+          <div class="flex items-baseline justify-between gap-4">
+            <span class="flex items-baseline gap-2">
+              <span
+                class="h-1.5 w-1.5 shrink-0 translate-y-[-2px] rounded-full"
+                style={"background-color: #{signal_color(signal.level)}"}
+              ></span>
+              <span class="text-xs text-text">{signal.title}</span>
+            </span>
+            <span
+              :if={signal.value}
+              class="num shrink-0 text-sm"
+              style={"color: #{signal_color(signal.level)}"}
+            >
+              {signal.value}
+            </span>
+          </div>
+          <p class="mt-1.5 text-[11px] leading-relaxed text-faint">{signal.detail}</p>
+        </article>
+      </div>
+
+      <p :if={@signals == []} class="px-5 pb-5 text-[11px] text-faint">
+        Charge, sommeil, variabilite cardiaque et repartition de l'intensite
+        sont tous dans leurs bornes habituelles.
+      </p>
+    </section>
+    """
+  end
+
+  defp signal_color(:alert), do: "var(--color-alert)"
+  defp signal_color(:watch), do: "var(--color-fatigue)"
+  defp signal_color(_info), do: "var(--color-dim)"
 
   attr :system, :map, required: true
 

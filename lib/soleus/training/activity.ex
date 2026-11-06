@@ -42,6 +42,7 @@ defmodule Soleus.Training.Activity do
     field :load, :float
     field :decoupling, :float
     field :intensity_factor, :float
+    field :hr_zone_s, {:array, :integer}
 
     field :analyzed_at, :utc_datetime
 
@@ -88,7 +89,7 @@ defmodule Soleus.Training.Activity do
   @doc "Changeset des metriques derivees, pose par le moteur d'analyse."
   def metrics_changeset(activity, attrs) do
     activity
-    |> cast(attrs, [:trimp, :load, :decoupling, :intensity_factor, :analyzed_at])
+    |> cast(attrs, [:trimp, :load, :decoupling, :intensity_factor, :hr_zone_s, :analyzed_at])
   end
 
   # La date locale est la cle de l'agregation quotidienne et de tous les

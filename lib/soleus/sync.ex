@@ -104,7 +104,15 @@ defmodule Soleus.Sync do
     Repo.one(
       from j in "oban_jobs",
         where: j.worker == "Soleus.Workers.SyncGarmin",
-        where: j.state in ["completed", "discarded", "retryable", "executing", "available"],
+        where:
+          j.state in [
+            "completed",
+            "cancelled",
+            "discarded",
+            "retryable",
+            "executing",
+            "available"
+          ],
         order_by: [desc: j.id],
         limit: 1,
         select: %{

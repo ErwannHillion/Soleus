@@ -3,6 +3,7 @@ defmodule SoleusWeb.SyncButtonTest do
 
   import Phoenix.LiveViewTest
 
+  alias Soleus.Repo
   alias Soleus.Sync
 
   describe "bouton de synchronisation Garmin" do
@@ -11,6 +12,29 @@ defmodule SoleusWeb.SyncButtonTest do
 
       assert html =~ "phx-click=\"sync\""
       assert html =~ "Garmin"
+    end
+
+    test "sans cle, n'annonce jamais une synchronisation passee", %{conn: conn} do
+      # Un job peut figurer comme termine dans l'historique d'Oban alors qu'il
+      # s'est arrete faute de cle. Le bouton doit s'en tenir a la seule chose
+      # qui soit vraie dans ce cas : il n'y a pas de cle.
+      Repo.insert_all("oban_jobs", [
+        %{
+          state: "completed",
+          queue: "ingestion",
+          worker: "Soleus.Workers.SyncGarmin",
+          args: %{},
+          completed_at: NaiveDateTime.utc_now() |> NaiveDateTime.truncate(:second),
+          attempted_at: NaiveDateTime.utc_now() |> NaiveDateTime.truncate(:second),
+          inserted_at: NaiveDateTime.utc_now() |> NaiveDateTime.truncate(:second),
+          scheduled_at: NaiveDateTime.utc_now() |> NaiveDateTime.truncate(:second)
+        }
+      ])
+
+      {:ok, _live, html} = live(conn, ~p"/")
+
+      assert html =~ "cle a configurer"
+      refute html =~ "a l&#39;instant"
     end
 
     test "sans cle configuree, explique quoi faire plutot que d'echouer", %{conn: conn} do

@@ -7,9 +7,16 @@ defmodule Mix.Tasks.Soleus.Enrich do
 
       mix soleus.enrich chemin/vers/..._summarizedActivities.json
 
-  Le nom affiche dans Garmin Connect ("Course a pied le midi") n'existe que
-  dans ce JSON : le fichier FIT, lui, ne contient que des mesures. Sans cette
-  etape, la liste des seances n'affiche que des tirets.
+  Deux choses n'existent que dans ce JSON :
+
+    * le **nom** affiche dans Garmin Connect ("Course a pied le midi"). Le
+      fichier FIT ne contient que des mesures ; sans cette etape, la liste
+      des seances n'affiche que des tirets ;
+    * le **temps passe dans chaque zone de frequence cardiaque**. Il se
+      deduirait de la serie seconde par seconde et des planchers de zones,
+      mais Garmin l'a deja calcule avec les memes bornes que la montre
+      appliquait **ce jour-la** — un recalcul avec les bornes d'aujourd'hui
+      reecrirait l'histoire a chaque changement de FC max.
 
   ## L'appariement
 
@@ -73,12 +80,33 @@ defmodule Mix.Tasks.Soleus.Enrich do
         count
 
       summary ->
-        attrs = %{name: summary["name"], notes: summary["locationName"]}
+        attrs = %{
+          name: summary["name"],
+          notes: summary["locationName"],
+          hr_zone_s: zones(summary)
+        }
 
         from(a in Activity, where: a.id == ^activity.id)
         |> Repo.update_all(set: Enum.reject(attrs, fn {_k, v} -> is_nil(v) end))
 
         count + 1
+    end
+  end
+
+  # Garmin publie sept compartiments, de `hrTimeInZone_0` (sous la zone 1) a
+  # `hrTimeInZone_6`. Le septieme est au dessus de la zone 5 et vaut zero sur
+  # tous les exports observes ; on le replie dans la zone 5 plutot que de
+  # trainer une zone fantome dans toute l'interface.
+  #
+  # Les valeurs sont en **millisecondes**, alors que tout le reste de Soleus
+  # compte en secondes.
+  defp zones(summary) do
+    buckets = Enum.map(0..6, &summary["hrTimeInZone_#{&1}"])
+
+    if Enum.any?(buckets, &is_number/1) do
+      values = Enum.map(buckets, fn v -> round((v || 0) / 1000) end)
+      {main, [above]} = Enum.split(values, 6)
+      List.update_at(main, 5, &(&1 + above))
     end
   end
 

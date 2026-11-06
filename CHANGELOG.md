@@ -61,6 +61,14 @@ fichier, au format [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
   faisabilité, objectif déduit de la forme quand aucun n'est saisi, et séances
   datées avec leur structure et leurs allures
 
+- Panneau « À regarder » : signaux dérivés des mesures — polarisation de
+  l'intensité, montée en charge, rapport aigu/chronique, variabilité
+  cardiaque sous la normale, sommeil en baisse, monotonie de Foster
+- Répartition du temps par zone de fréquence cardiaque, importée depuis
+  l'export Garmin (131 séances) et confrontée au modèle polarisé
+- Calendrier de charge : une colonne par semaine, qui révèle les rythmes
+  qu'une courbe temporelle masque
+
 ### Fixed
 
 - FC moyenne des efforts records sur les fichiers à enregistrement intelligent :
@@ -99,3 +107,8 @@ fichier, au format [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
   l'entier `0`, que `Float.floor/2` refuse
 - La tendance de vitesse critique est désormais calculée à un seul endroit :
   la projection d'objectif et le plan en donnaient deux valeurs différentes
+- Le bouton Garmin annonçait « il y a 4 minutes » alors qu'aucune clé n'est
+  configurée : l'état se lisait dans l'historique d'Oban, qui enregistrait
+  comme terminés des jobs arrêtés faute de clé
+- `{:discard, reason}` remplacé par `{:cancel, reason}`, déprécié depuis
+  Oban 2.14

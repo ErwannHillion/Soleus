@@ -19,13 +19,14 @@ defmodule Soleus.Training.Athlete do
     field :weight_kg, :float
     field :hr_max, :integer
     field :hr_rest, :integer
+    field :hr_zone_floors, {:array, :integer}
 
     timestamps(type: :utc_datetime)
   end
 
   def changeset(athlete, attrs) do
     athlete
-    |> cast(attrs, [:name, :sex, :birth_date, :weight_kg, :hr_max, :hr_rest])
+    |> cast(attrs, [:name, :sex, :birth_date, :weight_kg, :hr_max, :hr_rest, :hr_zone_floors])
     |> validate_inclusion(:sex, ~w(male female))
     |> validate_number(:hr_max, greater_than: 100, less_than: 250)
     |> validate_number(:hr_rest, greater_than: 25, less_than: 100)

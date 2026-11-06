@@ -242,6 +242,70 @@ defmodule Soleus.Training do
     )
   end
 
+  @doc """
+  Temps cumule par zone de frequence cardiaque sur une periode.
+
+  Rend une liste de six durees en secondes, de la zone 0 — sous la premiere
+  zone — a la zone 5. Les seances sans zones sont ignorees plutot que
+  comptees comme du temps en zone 0 : une montre sans ceinture ne veut pas
+  dire une heure passee au repos.
+  """
+  @spec zone_distribution(String.t(), Date.t(), Date.t()) :: [non_neg_integer()]
+  def zone_distribution(sport, from, to) do
+    from(a in Activity,
+      where: a.sport == ^sport and a.local_date >= ^from and a.local_date <= ^to,
+      where: not is_nil(a.hr_zone_s),
+      select: a.hr_zone_s
+    )
+    |> Repo.all()
+    |> sum_zones()
+  end
+
+  defp sum_zones([]), do: List.duplicate(0, 6)
+
+  defp sum_zones(rows) do
+    Enum.reduce(rows, List.duplicate(0, 6), fn zones, acc ->
+      zones
+      |> Enum.zip(acc)
+      |> Enum.map(fn {a, b} -> (a || 0) + b end)
+      |> Enum.take(6)
+    end)
+  end
+
+  @doc """
+  Nombre de jours depuis la derniere seance de qualite.
+
+  « Qualite » se lit sur le temps passe au dessus de la zone 2 : plus de dix
+  minutes en zones 3 a 5. Le critere porte sur l'intensite reellement
+  soutenue, et non sur le nom de la seance — un fractionne annule au bout de
+  deux series reste nomme « fractionne ».
+  """
+  @spec days_since_quality(String.t()) :: non_neg_integer() | nil
+  def days_since_quality(sport \\ "run") do
+    from(a in Activity,
+      where: a.sport == ^sport and not is_nil(a.hr_zone_s),
+      order_by: [desc: a.local_date],
+      limit: 60,
+      select: {a.local_date, a.hr_zone_s}
+    )
+    |> Repo.all()
+    |> Enum.find(fn {_date, zones} -> hard_seconds(zones) > 600 end)
+    |> case do
+      {date, _zones} -> Date.diff(Date.utc_today(), date)
+      nil -> nil
+    end
+  end
+
+  @doc "Secondes passees en zones 3 a 5."
+  @spec hard_seconds([integer()] | nil) :: non_neg_integer()
+  def hard_seconds(nil), do: 0
+  def hard_seconds(zones), do: zones |> Enum.drop(3) |> Enum.sum()
+
+  @doc "Secondes passees en zones 0 a 2."
+  @spec easy_seconds([integer()] | nil) :: non_neg_integer()
+  def easy_seconds(nil), do: 0
+  def easy_seconds(zones), do: zones |> Enum.take(3) |> Enum.sum()
+
   @doc "La date de la premiere activite connue, ou nil si la base est vide."
   def first_activity_date do
     Repo.one(from a in Activity, select: min(a.local_date))
