@@ -69,6 +69,12 @@ fichier, au format [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 - Calendrier de charge : une colonne par semaine, qui révèle les rythmes
   qu'une courbe temporelle masque
 
+- Zones de fréquence cardiaque dérivées des efforts maximaux de l'athlète
+  (FC max observée, FC au seuil), comparées à celles de la montre
+- Répartition de l'intensité **par allure**, qui ignore l'inertie cardiaque
+- Mesure de l'inertie cardiaque : délai avant que la FC rejoigne le régime
+  de la séance
+
 ### Fixed
 
 - FC moyenne des efforts records sur les fichiers à enregistrement intelligent :
@@ -112,3 +118,12 @@ fichier, au format [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
   comme terminés des jobs arrêtés faute de clé
 - `{:discard, reason}` remplacé par `{:cancel, reason}`, déprécié depuis
   Oban 2.14
+- Le signal de polarisation était faux. Il comparait « sous la zone 3 de
+  Garmin » (70 % de la FC max) à la frontière du modèle polarisé (premier
+  seuil ventilatoire), qui se situe bien plus haut. Sur le même historique il
+  annonçait 34 % de temps facile là où la mesure par allure en donne 72 %
+- L'estimation de la FC au seuil retenait tous les efforts à l'allure de
+  vitesse critique, dont ceux de début de sortie où la FC n'a pas fini de
+  monter : elle donnait 166 au lieu de 187. Elle n'utilise plus que les
+  efforts maximaux
+- La légende de la zone 0 affichait le dernier plancher au lieu d'aucun

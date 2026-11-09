@@ -24,6 +24,7 @@ defmodule Soleus.Signals do
   """
 
   alias Soleus.Analytics
+  alias Soleus.Analytics.Zones
   alias Soleus.Health
   alias Soleus.Training
 
@@ -63,40 +64,60 @@ defmodule Soleus.Signals do
   # -- repartition de l'intensite ---------------------------------------------
 
   # Le modele polarise situe autour de 80 % le temps passe sous le premier
-  # seuil ventilatoire — zones 1 et 2 chez Garmin. En dessous de 70 %, on
-  # s'eloigne nettement du modele, ce qui n'est pas une faute en soi mais
-  # merite d'etre vu.
-  defp polarisation(sport, today) do
-    zones = Training.zone_distribution(sport, Date.add(today, -90), today)
-    total = Enum.sum(zones)
+  # seuil. La mesure se fait par l'**allure** et non par la frequence
+  # cardiaque.
+  #
+  # Ce n'etait pas le cas au depart, et le resultat etait faux. Deux raisons
+  # se cumulaient. D'une part, le palier zone 2 / zone 3 de Garmin tombe a
+  # 70 % de la frequence maximale, nettement sous le premier seuil d'un
+  # coureur entraine : des allures franchement faciles etaient comptees comme
+  # moderees. D'autre part, la frequence cardiaque met parfois plus de dix
+  # minutes a monter, donc elle decrit mal l'effort du debut de seance — on a
+  # releve une fenetre de quinze minutes a 5:23/km avec 125 battements.
+  #
+  # Sur le meme historique, la lecture par allure donne 72 % de temps facile
+  # la ou la lecture par zones Garmin en donnait 34. L'allure est immediate ;
+  # elle ne se trompe pas de grandeur.
+  defp polarisation(_sport, today) do
+    bands = Zones.pace_distribution(Date.add(today, -90), today)
+    total = Enum.sum(bands)
 
     if total > 3600 do
-      easy = Training.easy_seconds(zones) / total * 100
+      easy = Zones.easy_pace_share(bands)
+      grey = Zones.grey_pace_share(bands)
 
       cond do
-        easy >= 70 ->
-          nil
-
-        easy >= 55 ->
-          signal(
-            :polarisation,
-            :watch,
-            "Beaucoup de temps en intensite",
-            "#{pct(easy)} du temps en zones 1-2 sur 90 jours. Le modele polarise situe ce chiffre autour de 80 %.",
-            pct(easy)
-          )
-
-        true ->
-          signal(
-            :polarisation,
-            :alert,
-            "Entrainement peu polarise",
-            "#{pct(easy)} seulement du temps en zones 1-2 sur 90 jours, contre 80 % dans le modele polarise. Plus de la moitie du temps se passe au dessus de la zone 2.",
-            pct(easy)
-          )
+        easy >= 70 and grey <= 15 -> nil
+        easy >= 70 -> grey_zone_signal(grey)
+        easy >= 55 -> polarisation_signal(:watch, easy, "s'ecarte du modele polarise")
+        true -> polarisation_signal(:alert, easy, "s'en eloigne nettement")
       end
     end
   end
+
+  defp polarisation_signal(level, easy, verdict) do
+    signal(
+      :polarisation,
+      level,
+      "Peu de temps en allure facile",
+      "#{pct(easy)} du temps plus lent que l'allure marathon sur 90 jours, contre 80 % dans le modele polarise. La repartition #{verdict}.",
+      pct(easy)
+    )
+  end
+
+  # La zone grise est le reproche classique fait aux plans mal construits :
+  # trop dur pour recuperer, trop facile pour developper.
+  defp grey_zone_signal(grey) when grey > 15 do
+    signal(
+      :grey_zone,
+      :watch,
+      "Temps en zone grise",
+      "#{pct(grey)} du temps entre allure marathon et allure seuil. Ni assez facile pour recuperer, ni assez dur pour developper.",
+      pct(grey)
+    )
+  end
+
+  defp grey_zone_signal(_grey), do: nil
 
   # -- charge -----------------------------------------------------------------
 

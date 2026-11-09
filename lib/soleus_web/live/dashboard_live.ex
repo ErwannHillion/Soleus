@@ -16,6 +16,7 @@ defmodule SoleusWeb.DashboardLive do
   alias Phoenix.LiveView.JS
   alias Soleus.Analytics
   alias Soleus.Analytics.{Decoupling, Load, Pace}
+  alias Soleus.Analytics.Zones
   alias Soleus.Config
   alias Soleus.Health
   alias Soleus.Ingest.Garmin.Token
@@ -253,6 +254,9 @@ defmodule SoleusWeb.DashboardLive do
     |> assign(:signals, Signals.all(sport))
     |> assign(:zones, Training.zone_distribution(sport, since, until))
     |> assign(:zone_floors, Training.athlete().hr_zone_floors)
+    |> assign(:derived_zones, Zones.derive(sport))
+    |> assign(:pace_bands, Zones.pace_distribution(since, until, sport))
+    |> assign(:cardiac_lag, Zones.cardiac_lag(sport))
     |> assign(
       :sessions,
       Training.list_activities(sport: socket.assigns.sport_filter, since: since, limit: 200)
@@ -384,10 +388,13 @@ defmodule SoleusWeb.DashboardLive do
           </div>
         </section>
         <section class="xl:col-span-5">
-          <.panel_head title="Repartition en zones" note="frequence cardiaque" />
-          <div class="px-5 pb-5">
-            <.zone_bar zones={@zones} floors={@zone_floors} class="w-full" />
-          </div>
+          <.intensity_panel
+            bands={@pace_bands}
+            zones={@zones}
+            garmin_floors={@zone_floors}
+            derived={@derived_zones}
+            lag={@cardiac_lag}
+          />
         </section>
       </div>
 
@@ -732,6 +739,121 @@ defmodule SoleusWeb.DashboardLive do
 
   defp per_week(%{distance_m: distance, weeks: weeks}) when weeks > 0, do: distance / weeks
   defp per_week(_totals), do: nil
+
+  attr :bands, :list, required: true
+  attr :zones, :list, required: true
+  attr :garmin_floors, :any, default: nil
+  attr :derived, :map, required: true
+  attr :lag, :any, default: nil
+
+  # Deux lectures de la meme chose, parce qu'elles ne disent pas la meme
+  # chose et que l'ecart est lui-meme une information. L'allure vient en
+  # premier : elle est immediate, la frequence cardiaque non.
+  defp intensity_panel(assigns) do
+    assigns =
+      assigns
+      |> assign(:easy, Zones.easy_pace_share(assigns.bands))
+      |> assign(:grey, Zones.grey_pace_share(assigns.bands))
+      |> assign(:hr_easy, hr_easy_share(assigns))
+
+    ~H"""
+    <.panel_head title="Repartition de l'intensite" note="allure, puis frequence" />
+
+    <div class="px-5 pb-5">
+      <div class="label mb-2">par allure</div>
+      <.band_bar bands={@bands} />
+
+      <p class="mt-3 text-[11px] leading-relaxed text-faint">
+        <span class="num" style={"color: #{polar_color(@easy)}"}>{round(@easy)} %</span>
+        du temps plus lent que l'allure marathon, et
+        <span class="num text-dim">{round(@grey)} %</span>
+        en zone grise. Le modele polarise situe le premier chiffre autour de 80 %.
+      </p>
+
+      <div class="mt-5 border-t border-line pt-4">
+        <div class="label mb-2">par frequence cardiaque</div>
+        <.zone_bar zones={@zones} floors={@garmin_floors} class="w-full" />
+      </div>
+
+      <dl
+        :if={@derived.source == :measured}
+        class="mt-5 grid grid-cols-2 gap-x-5 gap-y-3 border-t border-line pt-4"
+      >
+        <.metric label="FC max observee" value={"#{@derived.max_hr} bpm"} />
+        <.metric label="FC au seuil mesuree" value={"#{@derived.threshold_hr} bpm"} />
+        <.metric label="zones derivees" value={Enum.join(@derived.floors, " · ")} />
+        <.metric label="zones de la montre" value={garmin_text(@garmin_floors)} />
+      </dl>
+
+      <p :if={@lag} class="mt-4 text-[11px] leading-relaxed text-faint">
+        Ta frequence met <span class="num text-dim">{Pace.format_duration(@lag.median_s)}</span>
+        a rejoindre le regime de la seance, et
+        <span class="num text-dim">{Pace.format_duration(@lag.p75_s)}</span>
+        sur un quart des sorties. C'est pour cela que la lecture par allure fait
+        foi ici : sur le debut d'une sortie, la frequence decrit mal l'effort
+        reellement fourni.
+      </p>
+    </div>
+    """
+  end
+
+  attr :bands, :list, required: true
+
+  @band_colors [
+    "var(--color-form)",
+    "var(--color-fatigue)",
+    "var(--color-signal)",
+    "var(--color-alert)"
+  ]
+
+  defp band_bar(assigns) do
+    total = Enum.sum(assigns.bands)
+
+    assigns =
+      assign(
+        assigns,
+        :segments,
+        assigns.bands
+        |> Enum.zip(Zones.pace_bands())
+        |> Enum.zip(@band_colors)
+        |> Enum.map(fn {{seconds, label}, color} ->
+          %{label: label, color: color, share: if(total > 0, do: seconds / total * 100, else: 0)}
+        end)
+        |> Enum.reject(&(&1.share < 0.3))
+      )
+
+    ~H"""
+    <div class="flex h-7 w-full overflow-hidden">
+      <div
+        :for={segment <- @segments}
+        class="h-full"
+        style={"width: #{Float.round(segment.share, 2)}%; background-color: #{segment.color}; opacity: 0.85"}
+        title={"#{segment.label} · #{round(segment.share)} %"}
+      >
+      </div>
+    </div>
+
+    <div class="mt-3 grid grid-cols-2 gap-x-6 gap-y-1.5 sm:grid-cols-4">
+      <div :for={segment <- @segments} class="flex items-baseline gap-2">
+        <span class="h-2 w-2 shrink-0" style={"background-color: #{segment.color}"}></span>
+        <span class="text-[10px] text-dim">{segment.label}</span>
+        <span class="num ml-auto text-[11px] text-text">{round(segment.share)} %</span>
+      </div>
+    </div>
+    """
+  end
+
+  defp polar_color(share) when share >= 70, do: "var(--color-form)"
+  defp polar_color(share) when share >= 55, do: "var(--color-fatigue)"
+  defp polar_color(_share), do: "var(--color-alert)"
+
+  defp garmin_text(nil), do: "—"
+  defp garmin_text(floors), do: Enum.join(floors, " · ")
+
+  defp hr_easy_share(%{zones: zones, derived: %{source: :measured} = derived}),
+    do: Zones.easy_share(zones, derived.easy_below, derived.floors)
+
+  defp hr_easy_share(_assigns), do: nil
 
   attr :signals, :list, required: true
 

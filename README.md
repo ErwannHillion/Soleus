@@ -175,6 +175,26 @@ de semaines qu'il faudrait, et construit le plan vers le temps **reellement**
 atteignable : s'entrainer a une allure qu'on ne tiendra pas le jour J est le
 meilleur moyen de rater la course.
 
+## Zones et intensite
+
+Les zones de la montre sont decoupees en pourcentage de frequence maximale,
+aux paliers 50/60/70/80/90 %. Ce decoupage pose deux problemes : la frequence
+maximale retenue peut etre fausse, et surtout le palier a 70 % tombe nettement
+**sous** le premier seuil d'un coureur entraine.
+
+`Soleus.Analytics.Zones` derive donc les zones des efforts de l'athlete :
+frequence maximale observee, et frequence au seuil estimee sur les efforts
+maximaux de quinze a quarante-cinq minutes.
+
+Mais la lecture qui fait foi est celle **par allure**, pas par frequence. Sur
+cet historique, la frequence met en mediane 5 min 20 — et plus de 11 minutes
+sur un quart des sorties — a rejoindre le regime de la seance. Une fenetre de
+quinze minutes a 5:23/km y a ete relevee avec 125 battements. L'allure, elle,
+est immediate.
+
+L'ecart entre les deux lectures est lui-meme une information, et l'interface
+affiche les deux.
+
 ## Notes de conception
 
 Les choix qui ne se devinent pas a la lecture sont commentes a l'endroit ou ils

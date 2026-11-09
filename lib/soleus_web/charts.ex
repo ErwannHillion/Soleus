@@ -755,7 +755,10 @@ defmodule SoleusWeb.Charts do
             seconds: seconds,
             share: seconds / total * 100,
             color: Enum.at(@zone_colors, index),
-            floor: assigns.floors && Enum.at(assigns.floors, index - 1)
+            # La zone 0 n'a pas de plancher — elle est *sous* la zone 1.
+            # `Enum.at(floors, -1)` remontait le dernier plancher et
+            # affichait « Z0 · 186+ », soit l'exact oppose.
+            floor: index > 0 && assigns.floors && Enum.at(assigns.floors, index - 1)
           }
         end)
         |> Enum.reject(&(&1.share < 0.3))
