@@ -75,6 +75,12 @@ fichier, au format [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 - Mesure de l'inertie cardiaque : délai avant que la FC rejoigne le régime
   de la séance
 
+- La synchronisation Garmin récupère aussi les données de santé : sommeil,
+  HRV, stress, réserve d'énergie, pas, sur une fenêtre de 30 jours
+- Les séances synchronisées par l'API reçoivent leur nom et leurs zones de
+  fréquence depuis le résumé renvoyé par la recherche
+- `mix soleus.garmin sante` et `mix soleus.garmin probe`
+
 ### Fixed
 
 - FC moyenne des efforts records sur les fichiers à enregistrement intelligent :

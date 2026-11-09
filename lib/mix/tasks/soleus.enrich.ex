@@ -36,6 +36,7 @@ defmodule Mix.Tasks.Soleus.Enrich do
   import Ecto.Query
 
   alias Soleus.Repo
+  alias Soleus.Training
   alias Soleus.Training.Activity
 
   @requirements ["app.start"]
@@ -80,33 +81,10 @@ defmodule Mix.Tasks.Soleus.Enrich do
         count
 
       summary ->
-        attrs = %{
-          name: summary["name"],
-          notes: summary["locationName"],
-          hr_zone_s: zones(summary)
-        }
-
-        from(a in Activity, where: a.id == ^activity.id)
-        |> Repo.update_all(set: Enum.reject(attrs, fn {_k, v} -> is_nil(v) end))
-
+        # La traduction vit dans `Soleus.Training` : l'API personnelle recoit
+        # le meme objet, et dupliquer la logique la ferait diverger.
+        Training.apply_summary(activity.id, summary)
         count + 1
-    end
-  end
-
-  # Garmin publie sept compartiments, de `hrTimeInZone_0` (sous la zone 1) a
-  # `hrTimeInZone_6`. Le septieme est au dessus de la zone 5 et vaut zero sur
-  # tous les exports observes ; on le replie dans la zone 5 plutot que de
-  # trainer une zone fantome dans toute l'interface.
-  #
-  # Les valeurs sont en **millisecondes**, alors que tout le reste de Soleus
-  # compte en secondes.
-  defp zones(summary) do
-    buckets = Enum.map(0..6, &summary["hrTimeInZone_#{&1}"])
-
-    if Enum.any?(buckets, &is_number/1) do
-      values = Enum.map(buckets, fn v -> round((v || 0) / 1000) end)
-      {main, [above]} = Enum.split(values, 6)
-      List.update_at(main, 5, &(&1 + above))
     end
   end
 

@@ -34,7 +34,7 @@ defmodule Soleus.Workers.SyncGarmin do
   alias Soleus.Ingest.Garmin.Token
   alias Soleus.Sync
   alias Soleus.Training
-  alias Soleus.Workers.RebuildLoads
+  alias Soleus.Workers.{RebuildLoads, SyncWellness}
 
   @default_window_days 7
 
@@ -69,6 +69,11 @@ defmodule Soleus.Workers.SyncGarmin do
       %{} |> RebuildLoads.new() |> Oban.insert()
     end
 
+    # Les donnees de sante suivent dans un job distinct : elles n'ont pas la
+    # meme fenetre ni le meme cout, et un echec de leur cote ne doit pas faire
+    # reessayer le telechargement des seances.
+    %{} |> SyncWellness.new() |> Oban.insert()
+
     Sync.broadcast({:sync, :done, %{imported: imported, seen: total}})
     :ok
   end
@@ -95,11 +100,12 @@ defmodule Soleus.Workers.SyncGarmin do
     {:error, reason}
   end
 
-  defp import_one(%{"activityId" => id}, imported) do
+  defp import_one(%{"activityId" => id} = summary, imported) do
     dir = Path.join(Config.fit_import_dir(), "garmin")
 
     with {:ok, path} <- Garmin.download_activity(id, dir),
-         {:ok, :imported, _activity} <- Training.import_fit(path) do
+         {:ok, :imported, activity} <- Training.import_fit(path) do
+      Training.apply_summary(activity, summary)
       imported + 1
     else
       {:ok, :already_imported, _activity} ->

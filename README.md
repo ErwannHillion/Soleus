@@ -80,8 +80,21 @@ de la HRV nocturne. L'import les ecarte tout seul.
 echo 'GARMIN_API_KEY=...' >> .env
 
 mix soleus.garmin check     # verifie la cle et interroge un endpoint reel
-mix soleus.garmin sync      # synchronise les 7 derniers jours
+mix soleus.garmin sync      # seances des 7 derniers jours
+mix soleus.garmin sante     # sommeil, HRV, stress, pas des 30 derniers jours
+mix soleus.garmin probe     # forme brute des reponses, pour confirmer la traduction
 ```
+
+La synchronisation automatique fait les deux : les seances d'abord, puis les
+donnees de sante dans un job distinct. La fenetre des seances est de sept
+jours, celle de la sante de trente — ces mesures se consolident apres coup et
+ne coutent qu'une requete par famille.
+
+**Ce qui ne peut pas venir de l'API** : les lignes de base personnelles
+(fourchettes normales de HRV, de FC au repos, de temperature cutanee) n'ont
+pas d'endpoint publie. Elles viennent de l'export RGPD et ne se rafraichissent
+pas. La page Corps les utilise pour situer chaque mesure, donc elles
+vieilliront lentement sans que rien ne casse.
 
 Une fois la cle en place, la synchronisation part de trois facons :
 

@@ -28,6 +28,7 @@ defmodule Soleus.Ingest.Garmin do
   require Logger
 
   alias Soleus.Ingest.Garmin.Token
+  alias Soleus.Ingest.Wellness
 
   @base_url "https://personal.connectapi.garmin.com"
 
@@ -37,6 +38,21 @@ defmodule Soleus.Ingest.Garmin do
   @download_path "/download-service/files/activity"
   @hr_zones_path "/biometric-service/heartRateZones/v2"
   @profile_path "/userprofile-service/userprofile/settings"
+
+  # Endpoints de sante, par famille. Ceux qui acceptent une plage de dates
+  # sont privilegies : une requete par famille et par synchronisation plutot
+  # qu'une par jour.
+  #
+  # `{:range, chemin}` interpole les dates dans le chemin, `{:params, chemin}`
+  # les passe en parametres. Les deux conventions coexistent chez Garmin.
+  @wellness_sources [
+    {:daily_summary, {:params, "/usersummary-service/v2/dailysummaries"}},
+    {:sleep, {:params, "/sleep-service/sleep/dailySleepSummariesByDate"}},
+    {:health_status, {:range, "/hrv-service/hrv/daily"}},
+    {:daily_summary, {:params, "/wellness-service/wellness/bodyBattery/reports/daily"}},
+    {:daily_summary, {:range, "/usersummary-service/stats/stress/daily"}},
+    {:daily_summary, {:range, "/usersummary-service/stats/steps/daily"}}
+  ]
 
   @doc "URL de base, surchargeable pour les tests."
   def base_url, do: Application.get_env(:soleus, :garmin_base_url, @base_url)
@@ -174,6 +190,53 @@ defmodule Soleus.Ingest.Garmin do
   defp filename(activity_id, _name), do: "garmin_#{activity_id}.fit"
 
   # -- profil -----------------------------------------------------------------
+
+  # -- sante -------------------------------------------------------------------
+
+  @doc "Les sources de sante interrogees, pour le diagnostic."
+  def wellness_sources, do: @wellness_sources
+
+  @doc """
+  Recupere toutes les familles de donnees de sante sur une plage.
+
+  Rend `[{famille, enregistrements}]`. Une famille qui echoue n'interrompt
+  pas les autres : l'API personnelle est recente, les endpoints evoluent, et
+  perdre le sommeil parce que la reserve d'energie a renvoye un 404 serait
+  absurde.
+  """
+  @spec wellness(Date.t(), Date.t()) :: [{atom(), [map()]}]
+  def wellness(from, to) do
+    Enum.flat_map(@wellness_sources, fn {family, source} ->
+      case fetch_wellness(source, from, to) do
+        {:ok, body} -> [{family, Wellness.records(body)}]
+        {:error, reason} -> log_skip(source, reason)
+      end
+    end)
+  end
+
+  defp fetch_wellness({:range, path}, from, to) do
+    get("#{path}/#{Date.to_iso8601(from)}/#{Date.to_iso8601(to)}")
+  end
+
+  defp fetch_wellness({:params, path}, from, to) do
+    get(path, params: [startDate: Date.to_iso8601(from), endDate: Date.to_iso8601(to)])
+  end
+
+  defp log_skip({_kind, path}, reason) do
+    Logger.info("Garmin : #{path} ignore — #{inspect(reason)}")
+    []
+  end
+
+  @doc """
+  Reponse brute d'une source de sante, pour le diagnostic.
+
+  Sert a `mix soleus.garmin probe` : les formes exactes des reponses ne sont
+  pas publiees, et c'est en les regardant une fois avec une vraie cle qu'on
+  confirme la traduction.
+  """
+  @spec raw_wellness(atom() | {atom(), String.t()}, Date.t(), Date.t()) ::
+          {:ok, term()} | {:error, term()}
+  def raw_wellness(source, from, to), do: fetch_wellness(source, from, to)
 
   @doc "Zones de frequence cardiaque, dont la FC max retenue par Garmin."
   @spec heart_rate_zones() :: {:ok, term()} | {:error, term()}

@@ -27,6 +27,22 @@ defmodule Soleus.Ingest.Wellness do
   alias Soleus.Health.DailyWellness
   alias Soleus.Repo
 
+  # Les familles de donnees, et l'extracteur qui sait lire chacune. La table
+  # est publique parce que l'API personnelle Garmin sert **les memes champs**
+  # que l'export : meme backend, meme nommage. Seule l'enveloppe change, ce
+  # qui permet de partager toute la traduction entre les deux sources.
+  @families [
+    :daily_summary,
+    :sleep,
+    :health_status,
+    :readiness,
+    :acute_load,
+    :vo2max,
+    :endurance,
+    :hill,
+    :training_status
+  ]
+
   @doc """
   Importe toutes les familles trouvees sous `dir` et rend le nombre de jours.
 
@@ -36,15 +52,15 @@ defmodule Soleus.Ingest.Wellness do
   def import(dir) do
     days =
       %{}
-      |> merge_family(dir, "DI-Connect-Aggregator/UDSFile_*.json", &daily_summary/1)
-      |> merge_family(dir, "DI-Connect-Wellness/*_sleepData.json", &sleep/1)
-      |> merge_family(dir, "DI-Connect-Wellness/*_healthStatusData.json", &health_status/1)
-      |> merge_family(dir, "DI-Connect-Metrics/TrainingReadinessDTO_*.json", &readiness/1)
-      |> merge_family(dir, "DI-Connect-Metrics/MetricsAcuteTrainingLoad_*.json", &acute_load/1)
-      |> merge_family(dir, "DI-Connect-Metrics/MetricsMaxMetData_*.json", &vo2max/1)
-      |> merge_family(dir, "DI-Connect-Metrics/EnduranceScore_*.json", &endurance/1)
-      |> merge_family(dir, "DI-Connect-Metrics/HillScore_*.json", &hill/1)
-      |> merge_family(dir, "DI-Connect-Metrics/TrainingHistory_*.json", &training_status/1)
+      |> merge_family(dir, "DI-Connect-Aggregator/UDSFile_*.json", :daily_summary)
+      |> merge_family(dir, "DI-Connect-Wellness/*_sleepData.json", :sleep)
+      |> merge_family(dir, "DI-Connect-Wellness/*_healthStatusData.json", :health_status)
+      |> merge_family(dir, "DI-Connect-Metrics/TrainingReadinessDTO_*.json", :readiness)
+      |> merge_family(dir, "DI-Connect-Metrics/MetricsAcuteTrainingLoad_*.json", :acute_load)
+      |> merge_family(dir, "DI-Connect-Metrics/MetricsMaxMetData_*.json", :vo2max)
+      |> merge_family(dir, "DI-Connect-Metrics/EnduranceScore_*.json", :endurance)
+      |> merge_family(dir, "DI-Connect-Metrics/HillScore_*.json", :hill)
+      |> merge_family(dir, "DI-Connect-Metrics/TrainingHistory_*.json", :training_status)
 
     if map_size(days) == 0 do
       {:error, :no_wellness_files}
@@ -55,13 +71,20 @@ defmodule Soleus.Ingest.Wellness do
 
   # -- lecture ----------------------------------------------------------------
 
-  defp merge_family(acc, dir, pattern, extractor) do
-    dir
-    |> Path.join(pattern)
-    |> Path.wildcard()
-    |> Enum.flat_map(&records/1)
-    |> Enum.reduce(acc, fn record, days ->
-      case extract(record, extractor) do
+  @doc "Les familles reconnues."
+  def families, do: @families
+
+  @doc """
+  Fusionne des enregistrements bruts dans un accumulateur `date -> attributs`.
+
+  Le point d'entree partage entre l'import de fichiers et la synchronisation
+  par l'API : les deux produisent les memes enregistrements, seule la facon
+  de les obtenir differe.
+  """
+  @spec merge_records(map(), atom(), list()) :: map()
+  def merge_records(acc, family, records) do
+    Enum.reduce(records, acc, fn record, days ->
+      case extract(record, extractor_for(family)) do
         {date, attrs} when map_size(attrs) > 0 ->
           Map.update(days, date, attrs, &Map.merge(&1, attrs))
 
@@ -71,12 +94,46 @@ defmodule Soleus.Ingest.Wellness do
     end)
   end
 
-  defp records(path) do
-    case path |> File.read!() |> Jason.decode!() do
-      list when is_list(list) -> Enum.filter(list, &is_map/1)
-      %{} = map -> [map]
-      _other -> []
+  @doc """
+  Normalise une reponse JSON en liste d'enregistrements.
+
+  Les reponses de l'API ne sont pas toutes de la meme forme : certaines
+  rendent une liste, d'autres un objet unique, d'autres encore un objet qui
+  enveloppe une liste sous une cle variable. On accepte les trois plutot que
+  d'en supposer une.
+  """
+  @spec records(term()) :: [map()]
+  def records(list) when is_list(list), do: Enum.filter(list, &is_map/1)
+
+  def records(%{} = map) do
+    cond do
+      Map.has_key?(map, "calendarDate") -> [map]
+      inner = Enum.find_value(map, &wrapped_list/1) -> records(inner)
+      true -> []
     end
+  end
+
+  def records(_other), do: []
+
+  defp wrapped_list({_key, value}) when is_list(value), do: value
+  defp wrapped_list(_pair), do: nil
+
+  defp extractor_for(:daily_summary), do: &daily_summary/1
+  defp extractor_for(:sleep), do: &sleep/1
+  defp extractor_for(:health_status), do: &health_status/1
+  defp extractor_for(:readiness), do: &readiness/1
+  defp extractor_for(:acute_load), do: &acute_load/1
+  defp extractor_for(:vo2max), do: &vo2max/1
+  defp extractor_for(:endurance), do: &endurance/1
+  defp extractor_for(:hill), do: &hill/1
+  defp extractor_for(:training_status), do: &training_status/1
+
+  defp merge_family(acc, dir, pattern, family) do
+    dir
+    |> Path.join(pattern)
+    |> Path.wildcard()
+    |> Enum.flat_map(&(&1 |> File.read!() |> Jason.decode!() |> records()))
+    |> then(&merge_records(acc, family, &1))
   end
 
   # Une famille mal formee ne doit pas interrompre l'import des autres : un
@@ -262,7 +319,16 @@ defmodule Soleus.Ingest.Wellness do
 
   # -- ecriture ---------------------------------------------------------------
 
-  defp upsert(days) do
+  @doc """
+  Ecrit les journees accumulees, en ne reecrivant que les colonnes presentes.
+
+  Publique parce que la synchronisation par l'API passe par le meme chemin
+  d'ecriture : il n'y a qu'une facon d'enregistrer une journee.
+  """
+  @spec upsert(map()) :: non_neg_integer()
+  def upsert(days) when map_size(days) == 0, do: 0
+
+  def upsert(days) do
     now = DateTime.utc_now() |> DateTime.truncate(:second)
 
     rows =

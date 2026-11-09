@@ -111,6 +111,19 @@ defmodule SoleusWeb.DashboardLive do
      |> load_data()}
   end
 
+  def handle_info({:sync, :wellness_started, _info}, socket) do
+    {:noreply, assign(socket, sync: %{state: :running, label: "sommeil, HRV..."})}
+  end
+
+  # Les donnees de sante arrivent apres les seances, dans un job distinct.
+  # Elles touchent la page Corps et les signaux, d'ou le rechargement.
+  def handle_info({:sync, :wellness_done, %{days: days}}, socket) do
+    {:noreply,
+     socket
+     |> assign(sync: %{state: :done, label: "#{days} jours de sante"})
+     |> load_data()}
+  end
+
   def handle_info({:sync, :failed, %{reason: reason}}, socket) do
     {:noreply, assign(socket, sync: %{state: :failed, label: Token.explain(reason)})}
   end

@@ -127,6 +127,60 @@ defmodule Soleus.Training do
   # -- lecture ----------------------------------------------------------------
 
   @doc """
+  Applique a une seance le resume que Garmin en donne.
+
+  Deux informations n'existent que la : le **nom** affiche dans Connect, et le
+  **temps passe dans chaque zone** de frequence cardiaque. Le fichier FIT ne
+  contient que des mesures.
+
+  Partage entre l'import d'un export RGPD et la synchronisation par l'API :
+  les deux recoivent le meme objet, puisqu'il vient du meme backend.
+
+  Les champs absents ne sont pas ecrits. Un resume incomplet ne doit pas
+  effacer ce qu'un passage precedent avait pose.
+  """
+  @spec apply_summary(Activity.t() | integer(), map()) :: :ok
+  def apply_summary(%Activity{id: id}, summary), do: apply_summary(id, summary)
+
+  def apply_summary(id, summary) when is_integer(id) do
+    attrs =
+      %{
+        name: summary["activityName"] || summary["name"],
+        notes: summary["locationName"],
+        hr_zone_s: zone_seconds(summary)
+      }
+      |> Enum.reject(fn {_key, value} -> is_nil(value) end)
+
+    if attrs != [] do
+      from(a in Activity, where: a.id == ^id) |> Repo.update_all(set: attrs)
+    end
+
+    :ok
+  end
+
+  @doc """
+  Temps par zone, en secondes, depuis un resume Garmin.
+
+  Garmin publie sept compartiments, de `hrTimeInZone_0` — sous la zone 1 — a
+  `hrTimeInZone_6`. Le septieme est au dessus de la zone 5 et vaut zero sur
+  tous les exports observes ; on le replie dans la zone 5 plutot que de
+  trainer une zone fantome dans toute l'interface.
+
+  Les valeurs sont en **millisecondes**, alors que tout le reste de Soleus
+  compte en secondes.
+  """
+  @spec zone_seconds(map()) :: [non_neg_integer()] | nil
+  def zone_seconds(summary) do
+    buckets = Enum.map(0..6, &summary["hrTimeInZone_#{&1}"])
+
+    if Enum.any?(buckets, &is_number/1) do
+      values = Enum.map(buckets, fn value -> round((value || 0) / 1000) end)
+      {main, [above]} = Enum.split(values, 6)
+      List.update_at(main, 5, &(&1 + above))
+    end
+  end
+
+  @doc """
   Les activites les plus recentes, sans leurs series.
 
   Options : `:sport` (ou `nil` pour tous), `:since`, `:limit`.
