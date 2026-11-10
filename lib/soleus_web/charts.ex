@@ -1334,10 +1334,14 @@ defmodule SoleusWeb.Charts do
     |> Enum.find(3600, &(last_t / &1 <= 8))
   end
 
+  # `t` est l'instant survole, en secondes depuis le depart. Il n'est present
+  # que sur les graphiques d'une seance : c'est lui qui permet a la carte de
+  # placer son curseur au meme endroit du parcours.
   defp stream_hover(points, x, assigns) do
     Enum.map(points, fn {t, value} ->
       %{
         x: percent(x.(t), assigns.width),
+        t: t,
         label: Pace.format_duration(t),
         rows: [%{k: assigns.label, v: stream_value(value, assigns), c: assigns.color}]
       }

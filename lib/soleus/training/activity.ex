@@ -44,10 +44,22 @@ defmodule Soleus.Training.Activity do
     field :intensity_factor, :float
     field :hr_zone_s, {:array, :integer}
 
+    field :avg_power, :integer
+    field :max_power, :integer
+    field :normalized_power, :integer
+    field :vertical_oscillation_mm, :float
+    field :stance_time_ms, :float
+    field :step_length_mm, :float
+    field :vertical_ratio, :float
+    field :aerobic_effect, :float
+    field :anaerobic_effect, :float
+    field :total_strides, :integer
+
     field :analyzed_at, :utc_datetime
 
     has_one :stream, Soleus.Training.Stream
     has_many :best_efforts, Soleus.Training.BestEffort
+    has_many :laps, Soleus.Training.Lap
 
     timestamps(type: :utc_datetime)
   end
@@ -74,7 +86,17 @@ defmodule Soleus.Training.Activity do
       :max_hr,
       :avg_cadence,
       :avg_speed_ms,
-      :max_speed_ms
+      :max_speed_ms,
+      :avg_power,
+      :max_power,
+      :normalized_power,
+      :vertical_oscillation_mm,
+      :stance_time_ms,
+      :step_length_mm,
+      :vertical_ratio,
+      :aerobic_effect,
+      :anaerobic_effect,
+      :total_strides
     ])
     |> put_local_date()
     |> validate_required([:source, :sport, :started_at, :local_date])
@@ -89,7 +111,24 @@ defmodule Soleus.Training.Activity do
   @doc "Changeset des metriques derivees, pose par le moteur d'analyse."
   def metrics_changeset(activity, attrs) do
     activity
-    |> cast(attrs, [:trimp, :load, :decoupling, :intensity_factor, :hr_zone_s, :analyzed_at])
+    |> cast(attrs, [
+      :trimp,
+      :load,
+      :decoupling,
+      :intensity_factor,
+      :hr_zone_s,
+      :analyzed_at,
+      :avg_power,
+      :max_power,
+      :normalized_power,
+      :vertical_oscillation_mm,
+      :stance_time_ms,
+      :step_length_mm,
+      :vertical_ratio,
+      :aerobic_effect,
+      :anaerobic_effect,
+      :total_strides
+    ])
   end
 
   # La date locale est la cle de l'agregation quotidienne et de tous les

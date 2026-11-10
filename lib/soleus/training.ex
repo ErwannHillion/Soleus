@@ -13,7 +13,7 @@ defmodule Soleus.Training do
   alias Soleus.Analytics.MeanMaximal
   alias Soleus.Ingest.Fit
   alias Soleus.Repo
-  alias Soleus.Training.{Activity, Athlete, BestEffort, Stream}
+  alias Soleus.Training.{Activity, Athlete, BestEffort, Lap, Stream}
 
   # -- ingestion --------------------------------------------------------------
 
@@ -76,6 +76,9 @@ defmodule Soleus.Training do
     |> Multi.run(:best_efforts, fn _repo, %{activity: activity} ->
       {:ok, insert_best_efforts(activity, decoded.series)}
     end)
+    |> Multi.run(:laps, fn _repo, %{activity: activity} ->
+      {:ok, insert_laps(activity, decoded[:laps] || [])}
+    end)
     |> Repo.transaction()
     |> case do
       {:ok, %{activity: activity}} -> {:ok, :imported, activity}
@@ -120,6 +123,39 @@ defmodule Soleus.Training do
 
     {count, _} = Repo.insert_all(BestEffort, rows, on_conflict: :nothing)
     count
+  end
+
+  @doc """
+  Enregistre les tours d'une seance.
+
+  Reappelable : les tours existants sont remplaces. C'est ce qui permet de
+  rattraper un historique importe avant que les tours soient lus, sans
+  reimporter les fichiers.
+  """
+  @spec insert_laps(Activity.t(), [map()]) :: non_neg_integer()
+  def insert_laps(%Activity{} = activity, laps) do
+    Repo.delete_all(from l in Lap, where: l.activity_id == ^activity.id)
+
+    rows =
+      laps
+      |> Enum.map(fn lap ->
+        lap
+        |> Map.put(:activity_id, activity.id)
+        |> Map.take(Lap.fields())
+        |> Map.merge(%{inserted_at: timestamp(), updated_at: timestamp()})
+      end)
+      |> Enum.reject(&is_nil(&1[:index]))
+
+    {count, _} = Repo.insert_all(Lap, rows)
+    count
+  end
+
+  @doc "Les tours d'une seance, dans l'ordre."
+  @spec laps(Activity.t() | integer()) :: [Lap.t()]
+  def laps(%Activity{id: id}), do: laps(id)
+
+  def laps(activity_id) when is_integer(activity_id) do
+    Repo.all(from l in Lap, where: l.activity_id == ^activity_id, order_by: [asc: l.index])
   end
 
   defp timestamp, do: DateTime.utc_now() |> DateTime.truncate(:second)

@@ -81,6 +81,15 @@ fichier, au format [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
   fréquence depuis le résumé renvoyé par la recherche
 - `mix soleus.garmin sante` et `mix soleus.garmin probe`
 
+- Le tracé et les graphiques d'une séance sont liés : survoler un graphique
+  déplace un curseur sur la carte
+- Les tours enregistrés par la montre, avec leur intensité (échauffement,
+  série, récupération) et le résumé des séries façon « 6 × 400 m à 4:07/km »
+- Détails de séance : puissance, cadence, longueur de foulée, temps de contact
+  au sol, oscillation verticale, effet d'entraînement
+- `mix soleus.laps` relit les tours des séances déjà importées sans tout
+  réimporter
+
 ### Fixed
 
 - FC moyenne des efforts records sur les fichiers à enregistrement intelligent :

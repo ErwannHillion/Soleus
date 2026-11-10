@@ -135,7 +135,9 @@ defmodule Soleus.Analytics.Splits do
   @doc """
   Coordonnees du trace, reduites pour l'affichage.
 
-  Rend `[[latitude, longitude]]`, la forme attendue par Leaflet. Le
+  Rend `[[latitude, longitude, seconde]]`. Les deux premieres valeurs sont la
+  forme attendue par Leaflet, qui ignore le reste ; la troisieme relie un
+  point du graphique a un endroit du trace sans second aller-retour. Le
   reechantillonnage suit la meme logique que les series : un point par seconde
   sur une heure de course donne 3 600 sommets de polyligne, dont l'immense
   majorite tombe sur le meme pixel.
@@ -147,9 +149,10 @@ defmodule Soleus.Analytics.Splits do
   def coordinates(series, target \\ 600) do
     with lats when is_list(lats) <- series[:lat],
          lons when is_list(lons) <- series[:lon],
-         pairs = usable(lats, lons),
-         count when count > 1 <- length(pairs) do
-      pairs
+         times when is_list(times) <- series[:t],
+         triples = usable_coordinates(times, lats, lons),
+         count when count > 1 <- length(triples) do
+      triples
       |> Enum.chunk_every(max(div(count, target), 1))
       |> Enum.map(&mean_coordinate/1)
       |> Enum.reject(&is_nil/1)
@@ -158,14 +161,22 @@ defmodule Soleus.Analytics.Splits do
     end
   end
 
+  defp usable_coordinates(times, lats, lons) do
+    [times, lats, lons]
+    |> Enum.zip()
+    |> Enum.reject(fn {t, lat, lon} -> is_nil(t) or is_nil(lat) or is_nil(lon) end)
+  end
+
   defp mean_coordinate([]), do: nil
 
   defp mean_coordinate(chunk) do
     n = length(chunk)
 
-    {sum_lat, sum_lon} =
-      Enum.reduce(chunk, {0.0, 0.0}, fn {a, o}, {sa, so} -> {sa + a, so + o} end)
+    {sum_t, sum_lat, sum_lon} =
+      Enum.reduce(chunk, {0, 0.0, 0.0}, fn {t, lat, lon}, {at, alat, alon} ->
+        {at + t, alat + lat, alon + lon}
+      end)
 
-    [sum_lat / n, sum_lon / n]
+    [sum_lat / n, sum_lon / n, round(sum_t / n)]
   end
 end

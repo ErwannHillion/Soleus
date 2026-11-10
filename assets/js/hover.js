@@ -67,6 +67,16 @@ export const Hover = {
     this.card.innerHTML = this.render(point);
     this.card.style.display = "block";
 
+    // Les autres composants de la page — la carte, notamment — ecoutent cet
+    // evenement pour se positionner au meme instant. Passer par le document
+    // plutot que par LiveView evite un aller-retour serveur a chaque pixel
+    // parcouru, et laisse chaque composant libre de l'ignorer.
+    if (point.t != null) {
+      document.dispatchEvent(
+        new CustomEvent("soleus:scrub", { detail: { t: point.t } }),
+      );
+    }
+
     // La carte bascule du cote oppose passe la moitie du graphe, pour ne
     // jamais sortir du cadre sur les derniers points.
     const flip = point.x > 55;
@@ -77,6 +87,7 @@ export const Hover = {
   hide() {
     if (this.line) this.line.style.display = "none";
     if (this.card) this.card.style.display = "none";
+    document.dispatchEvent(new CustomEvent("soleus:scrub", { detail: { t: null } }));
   },
 
   render(point) {

@@ -12,6 +12,12 @@ import * as L from "../vendor/leaflet.js";
 export const TrackMap = {
   mounted() {
     this.render();
+
+    // Le curseur suit le survol des graphiques de la meme seance. Garde une
+    // reference pour pouvoir se desabonner : sans cela, naviguer d'une seance
+    // a l'autre empilerait un ecouteur par visite.
+    this.onScrub = (event) => this.scrub(event.detail.t);
+    document.addEventListener("soleus:scrub", this.onScrub);
   },
 
   updated() {
@@ -22,6 +28,7 @@ export const TrackMap = {
   },
 
   destroyed() {
+    document.removeEventListener("soleus:scrub", this.onScrub);
     this.destroy();
   },
 
@@ -29,11 +36,51 @@ export const TrackMap = {
     if (this.map) {
       this.map.remove();
       this.map = null;
+      this.cursor = null;
+    }
+  },
+
+  // Positionne le curseur a l'instant demande. La recherche est lineaire sur
+  // quelques centaines de points : une dichotomie ne se justifierait pas pour
+  // un gain imperceptible sur un evenement de souris.
+  scrub(t) {
+    if (!this.map || !this.points) return;
+
+    if (t == null) {
+      if (this.cursor) this.cursor.setStyle({ opacity: 0, fillOpacity: 0 });
+      return;
+    }
+
+    let best = null;
+    let distance = Infinity;
+
+    for (const point of this.points) {
+      const gap = Math.abs(point[2] - t);
+      if (gap < distance) {
+        distance = gap;
+        best = point;
+      }
+    }
+
+    if (!best) return;
+
+    if (!this.cursor) {
+      this.cursor = L.circleMarker([best[0], best[1]], {
+        radius: 6,
+        color: "#e9e9f0",
+        fillColor: "#7c5cff",
+        fillOpacity: 1,
+        weight: 2,
+      }).addTo(this.map);
+    } else {
+      this.cursor.setLatLng([best[0], best[1]]);
+      this.cursor.setStyle({ opacity: 1, fillOpacity: 1 });
     }
   },
 
   render() {
-    const points = this.points();
+    const points = this.readPoints();
+    this.points = points;
     if (points.length < 2) return;
 
     this.map = L.map(this.el, {
@@ -81,7 +128,7 @@ export const TrackMap = {
     this.map.fitBounds(line.getBounds(), { padding: [18, 18] });
   },
 
-  points() {
+  readPoints() {
     try {
       return JSON.parse(this.el.dataset.track || "[]");
     } catch {

@@ -153,6 +153,7 @@ defmodule Soleus.Ingest.Fit do
         {:error, :no_timestamp}
 
       start ->
+        laps = laps(records, start)
         series = series(points, start)
 
         {:ok,
@@ -175,6 +176,17 @@ defmodule Soleus.Ingest.Fit do
            max_speed_ms:
              num(session, "enhanced_max_speed") || num(session, "max_speed") ||
                max_of(series[:speed_ms]),
+           avg_power: num(session, "avg_power") |> round_or_nil(),
+           max_power: num(session, "max_power") |> round_or_nil(),
+           normalized_power: num(session, "normalized_power") |> round_or_nil(),
+           vertical_oscillation_mm: num(session, "avg_vertical_oscillation"),
+           stance_time_ms: num(session, "avg_stance_time"),
+           step_length_mm: num(session, "avg_step_length"),
+           vertical_ratio: num(session, "avg_vertical_ratio"),
+           aerobic_effect: num(session, "total_training_effect"),
+           anaerobic_effect: num(session, "total_anaerobic_training_effect"),
+           total_strides: num(session, "total_strides") |> round_or_nil(),
+           laps: laps,
            series: series,
            digest: digest
          }}
@@ -204,6 +216,65 @@ defmodule Soleus.Ingest.Fit do
   # Le depart vient de la session quand elle existe, sinon du premier point.
   defp started_at(session, points) do
     datetime(session, "start_time") || points |> List.first() |> datetime("timestamp")
+  end
+
+  # -- tours ------------------------------------------------------------------
+
+  # L'ordre des tours suit celui du fichier, qui est chronologique. On ne trie
+  # pas sur `message_index` : certains fichiers reconstruits le laissent vide,
+  # et un tri sur une cle absente melangerait l'echauffement et les series.
+  defp laps(records, start) do
+    records
+    |> Enum.filter(&(&1.kind == "lap"))
+    |> Enum.with_index()
+    |> Enum.map(fn {lap, index} -> lap_attrs(lap, index, start) end)
+  end
+
+  defp lap_attrs(lap, index, start) do
+    duration = num(lap, "total_timer_time")
+    distance = num(lap, "total_distance")
+
+    %{
+      index: index,
+      intensity: value(lap, "intensity"),
+      trigger: value(lap, "lap_trigger"),
+      start_offset_s: offset_from(lap, start),
+      duration_s: decimal(duration),
+      elapsed_s: decimal(num(lap, "total_elapsed_time")),
+      distance_m: decimal(distance),
+      speed_ms: decimal(speed_of(lap, distance, duration)),
+      avg_hr: num(lap, "avg_heart_rate") |> round_or_nil(),
+      max_hr: num(lap, "max_heart_rate") |> round_or_nil(),
+      avg_cadence: decimal(num(lap, "avg_running_cadence") || num(lap, "avg_cadence")),
+      avg_power: num(lap, "avg_power") |> round_or_nil(),
+      max_power: num(lap, "max_power") |> round_or_nil(),
+      normalized_power: num(lap, "normalized_power") |> round_or_nil(),
+      ascent_m: decimal(num(lap, "total_ascent")),
+      descent_m: decimal(num(lap, "total_descent")),
+      vertical_oscillation_mm: decimal(num(lap, "avg_vertical_oscillation")),
+      stance_time_ms: decimal(num(lap, "avg_stance_time")),
+      step_length_mm: decimal(num(lap, "avg_step_length")),
+      vertical_ratio: decimal(num(lap, "avg_vertical_ratio"))
+    }
+  end
+
+  # La vitesse annoncee par la montre est preferee au quotient distance sur
+  # temps : elle est calculee sur le temps en mouvement, donc elle ne compte
+  # pas une pause au feu rouge comme de la course tres lente.
+  defp speed_of(lap, distance, duration) do
+    cond do
+      speed = num(lap, "enhanced_avg_speed") -> speed
+      speed = num(lap, "avg_speed") -> speed
+      is_number(distance) and is_number(duration) and duration > 0 -> distance / duration
+      true -> nil
+    end
+  end
+
+  defp offset_from(lap, start) do
+    case datetime(lap, "start_time") do
+      nil -> nil
+      at -> DateTime.diff(at, start)
+    end
   end
 
   # -- series -----------------------------------------------------------------
@@ -327,6 +398,13 @@ defmodule Soleus.Ingest.Fit do
 
   defp to_number(raw) when is_number(raw), do: raw
   defp to_number(_), do: nil
+
+  # Les tours sont ecrits par `insert_all`, qui ne convertit pas les types :
+  # un entier refuse d'entrer dans une colonne flottante, la ou un changeset
+  # l'aurait accepte. La conversion se fait donc a la source, ou l'on sait
+  # quel champ attend quoi.
+  defp decimal(nil), do: nil
+  defp decimal(value) when is_number(value), do: value * 1.0
 
   defp round_or_nil(nil), do: nil
   defp round_or_nil(n) when is_number(n), do: round(n)

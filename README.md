@@ -153,7 +153,7 @@ projection n'a aucune pente a extrapoler.
 | Accueil | vue d'ensemble : forme, charge, etat du jour, modele, predictions |
 | Forme | charge et forme sur la periode, confrontation a Garmin |
 | Seances | liste filtrable par sport ; une ligne ouvre le detail |
-| Seance | trace GPS sur fond OpenStreetMap, allure, FC, altitude, portions kilometriques |
+| Seance | trace OpenStreetMap lie aux graphiques, tours de la montre, dynamiques de course |
 | Courbe | courbe vitesse-duree, progression de la vitesse critique, records |
 | Corps | schema corporel, mesures de sante, sommeil, comparaison |
 | Comparer | deux periodes arbitraires cote a cote |
@@ -187,6 +187,24 @@ Quand le temps cible est hors de portee, la page l'annonce, chiffre le nombre
 de semaines qu'il faudrait, et construit le plan vers le temps **reellement**
 atteignable : s'entrainer a une allure qu'on ne tiendra pas le jour J est le
 meilleur moyen de rater la course.
+
+## Le detail d'une seance
+
+Le trace et les graphiques sont **lies** : survoler un graphique deplace un
+curseur sur la carte, a l'endroit ou l'athlete se trouvait a cet instant. La
+liaison passe par un evenement du document et non par LiveView — un
+aller-retour serveur par pixel parcouru serait inutilisable.
+
+Les **tours** affiches sont ceux que la montre a enregistres, pas une decoupe
+recalculee. Le fichier FIT porte un message `lap` par tour avec son
+**intensite** : echauffement, serie, recuperation, retour au calme. C'est ce
+qui permet de resumer un fractionne en « 6 x 400 m a 4:07/km » sans aucune
+heuristique.
+
+Attention a une subtilite : Garmin emploie l'intensite `interval` comme valeur
+**par defaut** des tours automatiques. Sur l'historique present, 761 tours la
+portent avec un declencheur `distance` — ce sont les kilometres d'un footing
+ordinaire. Seul `active` designe une vraie serie.
 
 ## Zones et intensite
 
