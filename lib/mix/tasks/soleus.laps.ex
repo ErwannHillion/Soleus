@@ -7,13 +7,13 @@ defmodule Mix.Tasks.Soleus.Laps do
       mix soleus.laps
 
   Les tours et les dynamiques de course — oscillation verticale, temps de
-  contact, longueur de foulee, puissance — sont dans les fichiers FIT depuis
-  le debut. L'import ne les extrayait pas.
+  contact au sol, longueur de foulee, puissance — sont dans les fichiers FIT
+  depuis le debut. L'import ne les extrayait pas.
 
   Plutot que de tout reimporter, cette tache relit chaque fichier a partir du
-  chemin conserve en base et ne reecrit que les champs concernes. Les
-  metriques deja calculees, les series et les efforts records ne sont pas
-  touches.
+  chemin conserve en base, et reecrit les tours, les champs de seance et les
+  **series**. Les efforts records ne sont pas recalcules : ils ne dependent
+  que de la distance et du temps, qui n'ont pas change.
 
   Les seances dont le fichier a disparu sont signalees et ignorees : un
   chemin casse ne doit pas interrompre le rattrapage des autres.
@@ -77,6 +77,7 @@ defmodule Mix.Tasks.Soleus.Laps do
       {:ok, decoded} ->
         laps = Training.insert_laps(activity, decoded[:laps] || [])
         Training.update_metrics(activity, Map.take(decoded, @extended))
+        Training.replace_series(activity, decoded.series)
 
         tally
         |> Map.update!(:laps, &(&1 + laps))

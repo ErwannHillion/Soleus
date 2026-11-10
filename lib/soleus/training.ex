@@ -150,6 +150,25 @@ defmodule Soleus.Training do
     count
   end
 
+  @doc """
+  Remplace les series d'une seance.
+
+  Sert au rattrapage : quand le decodeur apprend a lire une nouvelle mesure,
+  les seances deja en base ne la portent pas. Relire le fichier et remplacer
+  le bloc coute moins cher qu'un reimport complet, et ne touche ni aux
+  metriques calculees ni aux efforts records.
+  """
+  @spec replace_series(Activity.t(), map()) :: :ok
+  def replace_series(%Activity{id: id}, series) do
+    Repo.delete_all(from s in Stream, where: s.activity_id == ^id)
+
+    %Stream{}
+    |> Stream.changeset(%{activity_id: id, series: series})
+    |> Repo.insert!()
+
+    :ok
+  end
+
   @doc "Les tours d'une seance, dans l'ordre."
   @spec laps(Activity.t() | integer()) :: [Lap.t()]
   def laps(%Activity{id: id}), do: laps(id)
@@ -179,12 +198,11 @@ defmodule Soleus.Training do
   def apply_summary(%Activity{id: id}, summary), do: apply_summary(id, summary)
 
   def apply_summary(id, summary) when is_integer(id) do
+    activity = Repo.get(Activity, id)
+
     attrs =
-      %{
-        name: summary["activityName"] || summary["name"],
-        notes: summary["locationName"],
-        hr_zone_s: zone_seconds(summary)
-      }
+      summary
+      |> summary_attrs(activity)
       |> Enum.reject(fn {_key, value} -> is_nil(value) end)
 
     if attrs != [] do
@@ -193,6 +211,87 @@ defmodule Soleus.Training do
 
     :ok
   end
+
+  # Tout ce que le resume apporte et que le fichier FIT ne porte pas, ou porte
+  # moins commodement. Les altitudes sont en centimetres dans le resume, la
+  # ou le reste de Soleus compte en metres.
+  defp summary_attrs(summary, activity) do
+    %{
+      name: summary["activityName"] || summary["name"],
+      notes: summary["locationName"],
+      hr_zone_s: zone_seconds(summary),
+      power_zone_s: power_zone_seconds(summary),
+      grade_adjusted_speed_ms: grade_adjusted(summary, activity),
+      min_hr: round_or_nil(summary["minHr"]),
+      steps: round_or_nil(summary["steps"]),
+      min_elevation_m: centimetres(summary["minElevation"]),
+      max_elevation_m: centimetres(summary["maxElevation"]),
+      garmin_load: summary["activityTrainingLoad"],
+      vo2max: summary["vO2MaxValue"],
+      training_effect_label: summary["trainingEffectLabel"],
+      intensity_moderate_min: round_or_nil(summary["moderateIntensityMinutes"]),
+      intensity_vigorous_min: round_or_nil(summary["vigorousIntensityMinutes"]),
+      body_battery_delta: round_or_nil(summary["differenceBodyBattery"]),
+      bmr_calories: round_or_nil(summary["bmrCalories"]),
+      water_ml: round_or_nil(summary["waterEstimated"])
+    }
+  end
+
+  @doc """
+  Temps par zone de puissance, en secondes.
+
+  Six compartiments, de la zone 0 a la zone 5, la ou les zones cardiaques en
+  ont sept. Garmin n'ajoute pas de compartiment « au dela » pour la
+  puissance.
+  """
+  @spec power_zone_seconds(map()) :: [non_neg_integer()] | nil
+  def power_zone_seconds(summary) do
+    buckets = Enum.map(0..5, &summary["powerTimeInZone_#{&1}"])
+
+    if Enum.any?(buckets, &is_number/1) do
+      Enum.map(buckets, fn value -> round((value || 0) / 1000) end)
+    end
+  end
+
+  # La vitesse corrigee de la pente, ramenee en m/s.
+  #
+  # Le resume n'emploie pas la meme echelle que le fichier FIT pour les
+  # vitesses : une sortie a 2,83 m/s y figure a 0,283. Plutot que de coder en
+  # dur un facteur dix qui n'est documente nulle part, on passe par le
+  # **rapport** entre la vitesse corrigee et la vitesse brute du meme resume.
+  # Ce rapport est sans unite, donc insensible a la convention employee, et on
+  # l'applique a la vitesse du fichier FIT, qui est en m/s de facon certaine.
+  #
+  # Deux conditions avant d'accepter la valeur.
+  #
+  # La premiere est qu'il y ait un **denivele enregistre**. Sans altimetre
+  # actif, Garmin renseigne quand meme le champ, mais avec une valeur qui ne
+  # veut rien dire : sur cet historique, les sorties a denivele nul portent
+  # des rapports de 0,68 ou 0,90, soit une correction de pente de trente pour
+  # cent sur du plat. Les sorties avec denivele, elles, donnent 1,008.
+  #
+  # La seconde est un garde-fou sur le rapport lui-meme : une correction de
+  # pente ne change pas une allure du simple au double.
+  defp grade_adjusted(summary, %Activity{avg_speed_ms: speed}) when is_number(speed) do
+    with gain when is_number(gain) and gain > 0 <- summary["elevationGain"],
+         raw when is_number(raw) and raw > 0 <- summary["avgSpeed"],
+         adjusted when is_number(adjusted) <- summary["avgGradeAdjustedSpeed"],
+         ratio = adjusted / raw,
+         true <- ratio >= 0.85 and ratio <= 1.2 do
+      speed * ratio
+    else
+      _implausible -> nil
+    end
+  end
+
+  defp grade_adjusted(_summary, _activity), do: nil
+
+  defp centimetres(nil), do: nil
+  defp centimetres(value) when is_number(value), do: value / 100
+
+  defp round_or_nil(nil), do: nil
+  defp round_or_nil(value) when is_number(value), do: round(value)
+  defp round_or_nil(_other), do: nil
 
   @doc """
   Temps par zone, en secondes, depuis un resume Garmin.

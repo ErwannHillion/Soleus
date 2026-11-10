@@ -201,6 +201,12 @@ recalculee. Le fichier FIT porte un message `lap` par tour avec son
 qui permet de resumer un fractionne en « 6 x 400 m a 4:07/km » sans aucune
 heuristique.
 
+Les **dynamiques de course** sont lues seconde par seconde et non seulement
+en moyenne : longueur de foulee, temps de contact au sol, oscillation
+verticale, puissance. Garmin n'en publie que la moyenne dans son resume, alors
+que la serie dit bien plus — une foulee qui s'effondre en fin de sortie
+signale la fatigue avant que l'allure ne bouge.
+
 Attention a une subtilite : Garmin emploie l'intensite `interval` comme valeur
 **par defaut** des tours automatiques. Sur l'historique present, 761 tours la
 portent avec un declencheur `distance` — ce sont les kilometres d'un footing

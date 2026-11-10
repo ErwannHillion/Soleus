@@ -90,6 +90,13 @@ fichier, au format [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 - `mix soleus.laps` relit les tours des séances déjà importées sans tout
   réimporter
 
+- Dynamiques de course **seconde par seconde** : longueur de foulée, temps de
+  contact au sol, oscillation verticale, ratio vertical, puissance — tracées
+  comme l'allure et la fréquence
+- Allure corrigée de la pente, minutes d'intensité, pas, FC minimale, charge
+  Garmin, VO2max de la séance, variation de réserve d'énergie, perte hydrique,
+  amplitude d'altitude, zones de puissance
+
 ### Fixed
 
 - FC moyenne des efforts records sur les fichiers à enregistrement intelligent :
@@ -142,3 +149,9 @@ fichier, au format [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
   monter : elle donnait 166 au lieu de 187. Elle n'utilise plus que les
   efforts maximaux
 - La légende de la zone 0 affichait le dernier plancher au lieu d'aucun
+- L'allure corrigée de la pente de Garmin est inexploitable quand aucune
+  altitude n'est enregistrée : elle annonçait des corrections de 30 % sur du
+  plat. Elle n'est retenue que si un dénivelé existe
+- Le résumé d'activité n'emploie pas la même échelle de vitesse que le fichier
+  FIT (0,283 contre 2,83 m/s) : la correction passe désormais par un rapport
+  sans unité plutôt que par un facteur codé en dur

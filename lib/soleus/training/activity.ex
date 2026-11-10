@@ -54,6 +54,20 @@ defmodule Soleus.Training.Activity do
     field :aerobic_effect, :float
     field :anaerobic_effect, :float
     field :total_strides, :integer
+    field :grade_adjusted_speed_ms, :float
+    field :min_hr, :integer
+    field :steps, :integer
+    field :min_elevation_m, :float
+    field :max_elevation_m, :float
+    field :garmin_load, :float
+    field :vo2max, :float
+    field :training_effect_label, :string
+    field :intensity_moderate_min, :integer
+    field :intensity_vigorous_min, :integer
+    field :body_battery_delta, :integer
+    field :bmr_calories, :integer
+    field :water_ml, :integer
+    field :power_zone_s, {:array, :integer}
 
     field :analyzed_at, :utc_datetime
 
@@ -96,7 +110,21 @@ defmodule Soleus.Training.Activity do
       :vertical_ratio,
       :aerobic_effect,
       :anaerobic_effect,
-      :total_strides
+      :total_strides,
+      :grade_adjusted_speed_ms,
+      :min_hr,
+      :steps,
+      :min_elevation_m,
+      :max_elevation_m,
+      :garmin_load,
+      :vo2max,
+      :training_effect_label,
+      :intensity_moderate_min,
+      :intensity_vigorous_min,
+      :body_battery_delta,
+      :bmr_calories,
+      :water_ml,
+      :power_zone_s
     ])
     |> put_local_date()
     |> validate_required([:source, :sport, :started_at, :local_date])
@@ -127,7 +155,21 @@ defmodule Soleus.Training.Activity do
       :vertical_ratio,
       :aerobic_effect,
       :anaerobic_effect,
-      :total_strides
+      :total_strides,
+      :grade_adjusted_speed_ms,
+      :min_hr,
+      :steps,
+      :min_elevation_m,
+      :max_elevation_m,
+      :garmin_load,
+      :vo2max,
+      :training_effect_label,
+      :intensity_moderate_min,
+      :intensity_vigorous_min,
+      :body_battery_delta,
+      :bmr_calories,
+      :water_ml,
+      :power_zone_s
     ])
   end
 

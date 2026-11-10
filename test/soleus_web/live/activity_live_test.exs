@@ -138,6 +138,19 @@ defmodule SoleusWeb.ActivityLiveTest do
       refute html =~ "oscillation verticale"
     end
 
+    test "n'affiche que les graphiques dont la serie existe", %{conn: conn} do
+      # Une montre d'entree de gamme n'enregistre ni puissance ni dynamiques
+      # de course. Un graphique vide ne dirait rien et prendrait la place.
+      act = activity() |> with_series()
+
+      {:ok, _live, html} = live(conn, ~p"/seance/#{act.id}")
+
+      assert html =~ "Allure"
+      assert html =~ "Frequence cardiaque"
+      refute html =~ "Longueur de foulee"
+      refute html =~ "Temps de contact au sol"
+    end
+
     test "affiche les dynamiques de course quand elles existent", %{conn: conn} do
       act = activity() |> with_series()
 
@@ -156,6 +169,49 @@ defmodule SoleusWeb.ActivityLiveTest do
       assert html =~ "temps de contact"
       assert html =~ "250 W"
       assert html =~ "effet d&#39;entrainement"
+    end
+
+    test "l'allure corrigee de la pente apparait quand Garmin la fournit", %{conn: conn} do
+      act = activity() |> with_series()
+      Training.update_metrics(act, %{grade_adjusted_speed_ms: 3.4})
+
+      {:ok, _live, html} = live(conn, ~p"/seance/#{act.id}")
+
+      assert html =~ "allure corrigee"
+    end
+  end
+
+  describe "allure corrigee de la pente" do
+    test "est ignoree quand Garmin n'a pas de donnee d'altitude" do
+      # Sans altimetre actif, Garmin renseigne quand meme le champ avec une
+      # valeur sans signification : sur l'historique reel, des corrections de
+      # trente pour cent sur du plat.
+      act = activity()
+
+      Training.apply_summary(act.id, %{
+        "avgSpeed" => 0.283,
+        "avgGradeAdjustedSpeed" => 0.1875,
+        "elevationGain" => 0.0
+      })
+
+      assert Repo.get!(Activity, act.id).grade_adjusted_speed_ms == nil
+    end
+
+    test "est retenue quand le denivele existe et que le rapport est plausible" do
+      act = activity()
+
+      Training.apply_summary(act.id, %{
+        "avgSpeed" => 0.283,
+        "avgGradeAdjustedSpeed" => 0.2855,
+        "elevationGain" => 4761.0
+      })
+
+      corrigee = Repo.get!(Activity, act.id).grade_adjusted_speed_ms
+
+      # Le rapport, sans unite, s'applique a la vitesse du fichier FIT. Le
+      # resume n'emploie pas la meme echelle que le FIT, donc reprendre sa
+      # valeur telle quelle donnerait une allure dix fois trop lente.
+      assert_in_delta corrigee, 3.3 * (0.2855 / 0.283), 0.001
     end
   end
 end

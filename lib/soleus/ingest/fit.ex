@@ -47,7 +47,15 @@ defmodule Soleus.Ingest.Fit do
     power_w: ["power"],
     temperature_c: ["temperature"],
     lat: ["position_lat"],
-    lon: ["position_long"]
+    lon: ["position_long"],
+    # Dynamiques de course, enregistrees seconde par seconde par les montres
+    # qui en sont capables. Garmin n'en montre que la moyenne dans son resume,
+    # alors que la serie dit bien plus : une longueur de foulee qui s'effondre
+    # en fin de sortie signale la fatigue bien avant que l'allure ne bouge.
+    stance_time_ms: ["stance_time"],
+    step_length_mm: ["step_length"],
+    vertical_oscillation_mm: ["vertical_oscillation"],
+    vertical_ratio: ["vertical_ratio"]
   ]
 
   # Garmin stocke les coordonnees en semicercles : un entier signe 32 bits qui

@@ -42,7 +42,11 @@ defmodule Soleus.Training.Stream do
     :power_w,
     :temperature_c,
     :lat,
-    :lon
+    :lon,
+    :stance_time_ms,
+    :step_length_mm,
+    :vertical_oscillation_mm,
+    :vertical_ratio
   ]
 
   schema "activity_streams" do

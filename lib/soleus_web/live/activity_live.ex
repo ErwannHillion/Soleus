@@ -28,11 +28,94 @@ defmodule SoleusWeb.ActivityLive do
      |> assign(:laps, Training.laps(activity))
      |> assign(:splits, Splits.per_kilometer(series))
      |> assign(:track, Splits.coordinates(series))
-     |> assign(:speed, Splits.resample(series, :speed_ms))
-     |> assign(:hr, Splits.resample(series, :hr))
-     |> assign(:altitude, Splits.resample(series, :altitude_m))
+     |> assign(:charts, charts(series))
      |> assign(:page_title, activity.name || "Seance")}
   end
+
+  # Les series tracables, dans l'ordre d'interet. Une serie absente du
+  # fichier est simplement omise : toutes les montres n'enregistrent pas les
+  # dynamiques de course, et un graphique vide ne dit rien.
+  @chart_streams [
+    %{
+      key: :speed_ms,
+      id: "stream-pace",
+      title: "Allure",
+      label: "allure",
+      pace: true,
+      color: "var(--color-signal)"
+    },
+    %{
+      key: :hr,
+      id: "stream-hr",
+      title: "Frequence cardiaque",
+      label: "FC",
+      unit: " bpm",
+      color: "var(--color-alert)"
+    },
+    %{
+      key: :power_w,
+      id: "stream-power",
+      title: "Puissance",
+      label: "puissance",
+      unit: " W",
+      color: "var(--color-fatigue)"
+    },
+    %{
+      key: :altitude_m,
+      id: "stream-altitude",
+      title: "Altitude",
+      label: "altitude",
+      unit: " m",
+      color: "var(--color-dim)"
+    },
+    %{
+      key: :cadence,
+      id: "stream-cadence",
+      title: "Cadence",
+      label: "cadence",
+      unit: " pas/min",
+      color: "var(--color-form)",
+      scale: 2
+    },
+    %{
+      key: :step_length_mm,
+      id: "stream-step",
+      title: "Longueur de foulee",
+      label: "foulee",
+      unit: " mm",
+      color: "var(--color-signal-deep)"
+    },
+    %{
+      key: :stance_time_ms,
+      id: "stream-stance",
+      title: "Temps de contact au sol",
+      label: "contact",
+      unit: " ms",
+      color: "var(--color-signal-deep)"
+    },
+    %{
+      key: :vertical_oscillation_mm,
+      id: "stream-oscillation",
+      title: "Oscillation verticale",
+      label: "oscillation",
+      unit: " mm",
+      color: "var(--color-signal-deep)"
+    }
+  ]
+
+  defp charts(series) do
+    Enum.flat_map(@chart_streams, fn spec ->
+      case Splits.resample(series, spec.key) do
+        [] -> []
+        points -> [Map.put(spec, :points, scale_points(points, spec[:scale]))]
+      end
+    end)
+  end
+
+  # La cadence est enregistree en pas d'un seul pied par minute. Le chiffre
+  # que tout le monde lit est celui des deux pieds, d'ou le facteur deux.
+  defp scale_points(points, nil), do: points
+  defp scale_points(points, factor), do: Enum.map(points, fn {t, v} -> {t, v * factor} end)
 
   @impl true
   def render(assigns) do
@@ -87,31 +170,14 @@ defmodule SoleusWeb.ActivityLive do
 
           <section class="xl:col-span-8">
             <.stream_panel
-              :if={@speed != []}
-              id="stream-pace"
-              title="Allure"
-              points={@speed}
-              label="allure"
-              pace
-              color="var(--color-signal)"
-            />
-            <.stream_panel
-              :if={@hr != []}
-              id="stream-hr"
-              title="Frequence cardiaque"
-              points={@hr}
-              label="FC"
-              unit=" bpm"
-              color="var(--color-alert)"
-            />
-            <.stream_panel
-              :if={@altitude != []}
-              id="stream-altitude"
-              title="Altitude"
-              points={@altitude}
-              label="altitude"
-              unit=" m"
-              color="var(--color-fatigue)"
+              :for={stream <- @charts}
+              id={stream.id}
+              title={stream.title}
+              points={stream.points}
+              label={stream.label}
+              unit={stream[:unit] || ""}
+              pace={stream[:pace] || false}
+              color={stream.color}
             />
           </section>
         </div>
@@ -234,6 +300,12 @@ defmodule SoleusWeb.ActivityLive do
 
       <div class="grid grid-cols-2 gap-px border-t border-line bg-line sm:grid-cols-3 lg:grid-cols-6">
         <.detail
+          :if={@activity.grade_adjusted_speed_ms}
+          label="allure corrigee"
+          value={"#{Pace.format(@activity.grade_adjusted_speed_ms)}/km"}
+          note="de la pente"
+        />
+        <.detail
           :if={@activity.avg_power}
           label="puissance"
           value={"#{@activity.avg_power} W"}
@@ -266,12 +338,85 @@ defmodule SoleusWeb.ActivityLive do
           :if={@activity.aerobic_effect}
           label="effet d'entrainement"
           value={"#{@activity.aerobic_effect} aerobie"}
-          note={@activity.anaerobic_effect && "#{@activity.anaerobic_effect} anaerobie"}
+          note={effect_note(@activity)}
         />
+        <.detail
+          :if={@activity.steps}
+          label="pas"
+          value={Integer.to_string(@activity.steps)}
+          note={@activity.total_strides && "#{@activity.total_strides} foulees"}
+        />
+        <.detail
+          :if={@activity.min_hr}
+          label="FC minimale"
+          value={"#{@activity.min_hr} bpm"}
+          note="sur la seance"
+        />
+        <.detail
+          :if={@activity.garmin_load}
+          label="charge Garmin"
+          value={round(@activity.garmin_load) |> Integer.to_string()}
+          note={@activity.load && "Soleus #{round(@activity.load)}"}
+        />
+        <.detail
+          :if={@activity.vo2max}
+          label="VO2max"
+          value={"#{@activity.vo2max}"}
+          note="estimation de la montre"
+        />
+        <.detail
+          :if={@activity.intensity_vigorous_min}
+          label="minutes d'intensite"
+          value={"#{@activity.intensity_vigorous_min} soutenues"}
+          note={@activity.intensity_moderate_min && "#{@activity.intensity_moderate_min} moderees"}
+        />
+        <.detail
+          :if={@activity.body_battery_delta}
+          label="reserve d'energie"
+          value={signed(@activity.body_battery_delta)}
+          note="variation"
+        />
+        <.detail
+          :if={@activity.max_elevation_m}
+          label="altitude"
+          value={"#{round(@activity.min_elevation_m)}–#{round(@activity.max_elevation_m)} m"}
+          note={@activity.elevation_gain_m && "D+ #{round(@activity.elevation_gain_m)} m"}
+        />
+        <.detail
+          :if={@activity.water_ml}
+          label="perte hydrique"
+          value={"#{@activity.water_ml} ml"}
+          note="estimation"
+        />
+      </div>
+
+      <div :if={@activity.power_zone_s} class="border-t border-line px-5 py-4">
+        <div class="label mb-2">temps par zone de puissance</div>
+        <.zone_bar zones={@activity.power_zone_s} class="w-full" />
       </div>
     </section>
     """
   end
+
+  # Le libelle de Garmin est en majuscules anglaises — AEROBIC_BASE,
+  # TEMPO… — ce qui jure au milieu d'une interface francaise. On le rend
+  # lisible sans pretendre le traduire fidelement.
+  defp effect_note(%{anaerobic_effect: anaerobic, training_effect_label: label}) do
+    [anaerobic && "#{anaerobic} anaerobie", label && readable(label)]
+    |> Enum.reject(&is_nil/1)
+    |> Enum.join(" · ")
+    |> case do
+      "" -> nil
+      note -> note
+    end
+  end
+
+  defp readable(label) do
+    label |> String.downcase() |> String.replace("_", " ")
+  end
+
+  defp signed(value) when value > 0, do: "+#{value}"
+  defp signed(value), do: Integer.to_string(value)
 
   attr :label, :string, required: true
   attr :value, :string, required: true
@@ -287,17 +432,15 @@ defmodule SoleusWeb.ActivityLive do
     """
   end
 
+  @detail_fields ~w(
+    grade_adjusted_speed_ms avg_power step_length_mm stance_time_ms
+    vertical_oscillation_mm aerobic_effect steps min_hr garmin_load vo2max
+    intensity_vigorous_min body_battery_delta max_elevation_m water_ml
+    power_zone_s
+  )a
+
   defp has_details?(activity) do
-    Enum.any?(
-      [
-        activity.avg_power,
-        activity.step_length_mm,
-        activity.stance_time_ms,
-        activity.vertical_oscillation_mm,
-        activity.aerobic_effect
-      ],
-      &(not is_nil(&1))
-    )
+    Enum.any?(@detail_fields, &(not is_nil(Map.get(activity, &1))))
   end
 
   defp intensity_color("active"), do: "var(--color-signal)"
