@@ -329,3 +329,7 @@ s'appliquent. Les trois principaux :
 - **La serie de charge est reconstruite en entier, jamais mise a jour en
   place.** Les moyennes exponentielles se propagent, donc importer une seance
   ancienne invalide tout ce qui suit. (`Soleus.Analytics.rebuild_daily_loads/0`)
+
+## Licence
+
+Distribue sous licence MIT. Voir [`LICENSE`](LICENSE).
