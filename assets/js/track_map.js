@@ -67,8 +67,8 @@ export const TrackMap = {
     if (!this.cursor) {
       this.cursor = L.circleMarker([best[0], best[1]], {
         radius: 6,
-        color: "#e9e9f0",
-        fillColor: "#7c5cff",
+        color: "#f3f5f9",
+        fillColor: "#c6f432",
         fillOpacity: 1,
         weight: 2,
       }).addTo(this.map);
@@ -98,7 +98,7 @@ export const TrackMap = {
     }).addTo(this.map);
 
     const line = L.polyline(points, {
-      color: "#7c5cff",
+      color: "#c6f432",
       weight: 3,
       opacity: 0.95,
       lineJoin: "round",
@@ -107,8 +107,8 @@ export const TrackMap = {
 
     L.circleMarker(points[0], {
       radius: 5,
-      color: "#35e0a1",
-      fillColor: "#35e0a1",
+      color: "#36d6f0",
+      fillColor: "#36d6f0",
       fillOpacity: 1,
       weight: 2,
     })
@@ -117,8 +117,8 @@ export const TrackMap = {
 
     L.circleMarker(points[points.length - 1], {
       radius: 5,
-      color: "#ff5470",
-      fillColor: "#07070a",
+      color: "#ff5272",
+      fillColor: "#12151b",
       fillOpacity: 1,
       weight: 2,
     })

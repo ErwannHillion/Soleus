@@ -5,6 +5,19 @@ fichier, au format [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- Refonte visuelle : fond graphite plus clair, cartes arrondies, accent volt
+  et grands chiffres en condensé gras, dock et sélecteurs en pastilles
+- Nouvelle mise en page de chaque vue : jauge de forme, semaine jour par jour
+  et tendance de vitesse critique en tête de l'accueil, volume hebdomadaire et
+  liste de séances illustrée, répartition de l'intensité en anneau, échelle
+  des allures, comparaison en barres, plan en colonnes par phase, profil des
+  tours d'une séance
+- Animations d'entrée : cartes en cascade, graphes tracés de gauche à droite,
+  barres et anneaux qui se remplissent ; désactivées si le système demande
+  moins de mouvement
+
 ### Added
 
 - Ingestion idempotente des fichiers FIT Garmin, via le NIF Rust `fit_file`
@@ -99,6 +112,7 @@ fichier, au format [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
 ### Fixed
 
+- Le sélecteur de période met de nouveau en évidence la période affichée
 - FC moyenne des efforts records sur les fichiers à enregistrement intelligent :
   les secondes sans mesure étaient comptées comme des zéros, divisant la moyenne
   par le pas d'échantillonnage

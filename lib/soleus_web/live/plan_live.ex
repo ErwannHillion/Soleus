@@ -11,6 +11,7 @@ defmodule SoleusWeb.PlanLive do
   use SoleusWeb, :live_view
 
   import SoleusWeb.Dock
+  import SoleusWeb.Viz
 
   alias Soleus.Analytics.Pace
   alias Soleus.Coaching.{Feasibility, Plan, Target}
@@ -156,17 +157,23 @@ defmodule SoleusWeb.PlanLive do
   def render(assigns) do
     ~H"""
     <div class="flex h-dvh flex-col overflow-hidden bg-ink">
-      <header class="flex shrink-0 items-baseline justify-between border-b border-line px-5 py-3">
-        <div class="flex items-baseline gap-3">
-          <span class="h-2.5 w-2.5 translate-y-[-1px] bg-signal"></span>
-          <h1 class="text-sm font-semibold tracking-[0.32em] text-text">SOLEUS</h1>
-          <span class="label">plan d'entrainement</span>
+      <header class="flex shrink-0 items-center justify-between px-5 pb-1 pt-4">
+        <div class="flex items-center gap-3">
+          <span class="flex h-8 w-8 items-center justify-center rounded-[0.6rem] bg-signal">
+            <span class="hero-bolt-solid h-4.5 w-4.5 bg-ink"></span>
+          </span>
+          <div class="leading-none">
+            <h1 class="display text-[1.375rem] uppercase italic tracking-wide text-text">
+              Soleus
+            </h1>
+            <span class="text-[11px] font-medium text-faint">Plan d'entrainement</span>
+          </div>
         </div>
-        <span :if={@weeks > 0} class="num text-[11px] text-faint">{@weeks} semaines</span>
+        <span :if={@weeks > 0} class="chip">{@weeks} semaines</span>
       </header>
 
-      <main class="flex-1 overflow-y-auto pb-28">
-        <form id="plan-form" phx-change="change" class="border-b border-line px-5 py-4">
+      <main class="board flex-1 overflow-y-auto pb-28">
+        <form id="plan-form" phx-change="change" class="card px-5 py-4">
           <div class="flex flex-wrap items-end gap-x-8 gap-y-4">
             <.field label="Date de course">
               <input type="date" name="date" value={@params.date} class={input_class()} />
@@ -181,11 +188,8 @@ defmodule SoleusWeb.PlanLive do
                   phx-click="preset"
                   phx-value-distance={meters}
                   class={[
-                    "border px-2 py-1 text-[10px] uppercase tracking-[0.08em] transition-colors",
-                    if(@params.distance == to_string(meters),
-                      do: "border-signal-deep bg-signal-wash text-signal",
-                      else: "border-line text-faint hover:text-text"
-                    )
+                    "segment border border-line",
+                    @params.distance == to_string(meters) && "segment-active border-signal"
                   ]}
                 >
                   {label}
@@ -214,7 +218,7 @@ defmodule SoleusWeb.PlanLive do
           </p>
         </form>
 
-        <p :if={@error} class="px-5 py-8 text-xs text-faint">{@error}</p>
+        <p :if={@error} class="card px-5 py-8 text-xs text-faint">{@error}</p>
 
         <.assessment_panel
           :if={@assessment && @weeks > 0}
@@ -239,11 +243,8 @@ defmodule SoleusWeb.PlanLive do
 
   defp assessment_panel(assigns) do
     ~H"""
-    <section class="border-b border-line">
-      <div class={[
-        "grid grid-cols-2 divide-x divide-line md:grid-cols-4",
-        verdict_bar(@assessment.verdict)
-      ]}>
+    <section class={["card border-t-[3px]", verdict_bar(@assessment.verdict)]}>
+      <div class="grid grid-cols-2 gap-2 px-4 pt-4 md:grid-cols-4">
         <.stat
           label="verdict"
           value={Feasibility.explain(@assessment.verdict)}
@@ -308,43 +309,62 @@ defmodule SoleusWeb.PlanLive do
 
   defp plan_table(assigns) do
     ~H"""
-    <section>
-      <div class="flex items-baseline justify-between px-5 pb-3 pt-4">
-        <h2 class="text-[11px] font-semibold uppercase tracking-[0.14em] text-text">
-          Les seances
-        </h2>
-        <span class="label">
+    <section class="card">
+      <div class="flex items-baseline justify-between gap-4 px-5 pb-3 pt-4">
+        <h2 class="text-sm font-semibold text-text">Les seances</h2>
+        <span class="text-[11px] font-medium text-faint">
           {@plan.frequency} par semaine · charge {round(@plan.start_weekly_load)} → {round(
             @plan.peak_weekly_load
           )}
         </span>
       </div>
 
-      <div :for={week <- @plan.weeks} class="border-t border-line">
-        <div class="flex items-baseline justify-between bg-panel px-5 py-2">
-          <span class="flex items-baseline gap-3">
-            <span class="num text-xs text-signal">S{week.index}</span>
-            <span class="text-[10px] uppercase tracking-[0.1em] text-dim">{week.label}</span>
-            <span class="num text-[10px] text-faint">
-              {week_dates(week, @race, length(@plan.weeks))}
-            </span>
-          </span>
-          <span class="num text-[10px] text-faint">
-            charge {round(week.target_load)} · {Pace.format_duration(week.total_duration_s)}
+      <div class="px-5 pb-2">
+        <.bars bars={load_bars(@plan.weeks)} height="h-32" />
+        <div class="mt-3 flex flex-wrap gap-x-5 gap-y-1">
+          <span
+            :for={{phase, label} <- Plan.phase_labels()}
+            class="flex items-center gap-1.5 text-[11px] text-faint"
+          >
+            <span class="h-2 w-2 rounded-full" style={"background-color: #{phase_color(phase)}"}></span>
+            {label}
           </span>
         </div>
+      </div>
 
-        <table class="w-full">
-          <tbody class="divide-y divide-line">
-            <tr :for={session <- week.sessions} class="row-hover">
-              <td class="w-32 py-2 pl-5 text-xs text-dim">{session.label}</td>
-              <td class="num w-20 py-2 text-xs text-text">
+      <div class="grid grid-cols-1 gap-2 px-4 pb-2 pt-3 lg:grid-cols-2 2xl:grid-cols-3">
+        <article
+          :for={week <- @plan.weeks}
+          class="tile rise overflow-hidden"
+          style={"--i: #{min(week.index, 10)}; border-left: 3px solid #{phase_color(week.phase)}"}
+        >
+          <div class="flex items-baseline justify-between px-4 pb-2 pt-3">
+            <span class="flex items-baseline gap-2.5">
+              <span class="display text-2xl" style={"color: #{phase_color(week.phase)}"}>
+                S{week.index}
+              </span>
+              <span class="text-[11px] font-semibold uppercase tracking-[0.04em] text-dim">
+                {week.label}
+              </span>
+            </span>
+            <span class="num text-[11px] text-faint">
+              {week_dates(week, @race, length(@plan.weeks))}
+            </span>
+          </div>
+          <ul class="divide-y divide-line border-t border-line">
+            <li :for={session <- week.sessions} class="flex items-baseline gap-3 px-4 py-2">
+              <span class="w-24 shrink-0 text-xs font-medium text-text">{session.label}</span>
+              <span class="num w-14 shrink-0 text-xs font-semibold text-signal">
                 {Pace.format_duration(session.duration_s)}
-              </td>
-              <td class="py-2 pr-5 text-[11px] text-faint">{session.structure}</td>
-            </tr>
-          </tbody>
-        </table>
+              </span>
+              <span class="min-w-0 text-[11px] leading-snug text-faint">{session.structure}</span>
+            </li>
+          </ul>
+          <div class="num flex justify-between px-4 py-2 text-[11px] text-faint">
+            <span>charge {round(week.target_load)}</span>
+            <span>{Pace.format_duration(week.total_duration_s)}</span>
+          </div>
+        </article>
       </div>
 
       <p class="max-w-prose px-5 py-5 text-[11px] leading-relaxed text-faint">
@@ -379,11 +399,11 @@ defmodule SoleusWeb.PlanLive do
 
   defp stat(assigns) do
     ~H"""
-    <div class="px-5 py-4">
+    <div class="tile px-4 py-3.5">
       <div class="label">{@label}</div>
       <div class={[
-        "mt-1.5 leading-tight",
-        if(@small, do: "text-sm", else: "num text-2xl"),
+        "mt-2",
+        if(@small, do: "text-sm font-semibold leading-tight", else: "display text-[2rem]"),
         tone_class(@tone)
       ]}>
         {@value || "—"}
@@ -394,8 +414,7 @@ defmodule SoleusWeb.PlanLive do
   end
 
   defp input_class,
-    do:
-      "num border border-line bg-panel px-2 py-1 text-[11px] text-text focus:border-signal-deep focus:outline-none"
+    do: "num field"
 
   defp tone_class("signal"), do: "text-signal"
   defp tone_class("form"), do: "text-form"
@@ -409,9 +428,9 @@ defmodule SoleusWeb.PlanLive do
   defp verdict_tone(:out_of_reach), do: "alert"
   defp verdict_tone(_unknown), do: "text"
 
-  defp verdict_bar(:out_of_reach), do: "shadow-[inset_0_2px_0_0_var(--color-alert)]"
-  defp verdict_bar(:tight), do: "shadow-[inset_0_2px_0_0_var(--color-fatigue)]"
-  defp verdict_bar(_other), do: "shadow-[inset_0_2px_0_0_var(--color-form)]"
+  defp verdict_bar(:out_of_reach), do: "border-t-alert"
+  defp verdict_bar(:tight), do: "border-t-fatigue"
+  defp verdict_bar(_other), do: "border-t-form"
 
   defp projected(%{current_cs: cs, weekly_gain: gain, weeks_available: weeks})
        when is_number(cs),
@@ -437,4 +456,21 @@ defmodule SoleusWeb.PlanLive do
   end
 
   defp distances, do: @distances
+
+  defp load_bars(weeks) do
+    Enum.map(weeks, fn week ->
+      %{
+        value: week.target_load,
+        label: "S#{week.index}",
+        color: phase_color(week.phase),
+        title: "S#{week.index} · #{week.label} · charge #{round(week.target_load)}"
+      }
+    end)
+  end
+
+  defp phase_color(:base), do: "var(--color-form)"
+  defp phase_color(:build), do: "var(--color-accent)"
+  defp phase_color(:peak), do: "var(--color-signal)"
+  defp phase_color(:taper), do: "var(--color-fatigue)"
+  defp phase_color(_phase), do: "var(--color-dim)"
 end

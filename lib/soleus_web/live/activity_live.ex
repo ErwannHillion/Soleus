@@ -83,7 +83,7 @@ defmodule SoleusWeb.ActivityLive do
       title: "Longueur de foulee",
       label: "foulee",
       unit: " mm",
-      color: "var(--color-signal-deep)"
+      color: "var(--color-accent)"
     },
     %{
       key: :stance_time_ms,
@@ -91,7 +91,7 @@ defmodule SoleusWeb.ActivityLive do
       title: "Temps de contact au sol",
       label: "contact",
       unit: " ms",
-      color: "var(--color-signal-deep)"
+      color: "var(--color-accent)"
     },
     %{
       key: :vertical_oscillation_mm,
@@ -99,7 +99,7 @@ defmodule SoleusWeb.ActivityLive do
       title: "Oscillation verticale",
       label: "oscillation",
       unit: " mm",
-      color: "var(--color-signal-deep)"
+      color: "var(--color-accent)"
     }
   ]
 
@@ -121,21 +121,26 @@ defmodule SoleusWeb.ActivityLive do
   def render(assigns) do
     ~H"""
     <div class="flex h-dvh flex-col overflow-hidden bg-ink">
-      <header class="flex shrink-0 items-baseline justify-between border-b border-line px-5 py-3">
-        <div class="flex items-baseline gap-3">
-          <.link navigate={~p"/seances"} class="text-faint transition-colors hover:text-text">
-            <span class="hero-arrow-left h-3.5 w-3.5 bg-current" />
+      <header class="flex shrink-0 items-center justify-between px-5 pb-1 pt-4">
+        <div class="flex items-center gap-3">
+          <.link
+            navigate={~p"/seances"}
+            class="flex h-8 w-8 items-center justify-center rounded-full border border-line bg-panel text-dim transition-colors hover:border-line-bright hover:text-text"
+          >
+            <span class="hero-arrow-left h-4 w-4 bg-current" />
           </.link>
-          <h1 class="text-sm font-semibold tracking-[0.1em] text-text">
-            {@activity.name || "Seance"}
-          </h1>
-          <span class="label">{long_date(@activity.local_date)}</span>
+          <div class="leading-none">
+            <h1 class="display text-[1.375rem] text-text">{@activity.name || "Seance"}</h1>
+            <span class="text-[11px] font-medium text-faint">
+              {long_date(@activity.local_date)}
+            </span>
+          </div>
         </div>
-        <span class="num text-[11px] text-faint">{@activity.sport}</span>
+        <span class="chip">{@activity.sport}</span>
       </header>
 
-      <main class="flex-1 overflow-y-auto pb-28">
-        <div class="grid grid-cols-2 divide-x divide-line border-b border-line md:grid-cols-4 xl:grid-cols-8">
+      <main class="board flex-1 overflow-y-auto pb-28">
+        <div class="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-8">
           <.stat label="distance" value={km(@activity.distance_m)} unit="km" signal />
           <.stat label="temps" value={Pace.format_duration(@activity.moving_time_s)} />
           <.stat label="allure" value={Pace.format(@activity.avg_speed_ms)} unit="/km" />
@@ -146,8 +151,8 @@ defmodule SoleusWeb.ActivityLive do
           <.stat label="derive" value={decoupling(@activity.decoupling)} />
         </div>
 
-        <div class="grid grid-cols-1 divide-y divide-line xl:grid-cols-12 xl:divide-x xl:divide-y-0">
-          <section class="xl:col-span-4">
+        <div class="grid grid-cols-1 gap-3 xl:grid-cols-12">
+          <section class="card self-start xl:sticky xl:top-0 xl:col-span-4">
             <.panel_head title="Trace" note={gps_note(@track)} />
             <div class="px-5 pb-5">
               <%!-- `id` stable et `phx-update="ignore"` : Leaflet construit son
@@ -159,7 +164,7 @@ defmodule SoleusWeb.ActivityLive do
                 phx-hook="TrackMap"
                 phx-update="ignore"
                 data-track={Jason.encode!(@track)}
-                class="h-[26rem] w-full border border-line"
+                class="h-[26rem] w-full overflow-hidden rounded-xl"
               >
               </div>
               <p :if={@track == []} class="py-8 text-center text-xs text-faint">
@@ -168,7 +173,7 @@ defmodule SoleusWeb.ActivityLive do
             </div>
           </section>
 
-          <section class="xl:col-span-8">
+          <section class="card xl:col-span-8">
             <.stream_panel
               :for={stream <- @charts}
               id={stream.id}
@@ -190,7 +195,7 @@ defmodule SoleusWeb.ActivityLive do
               pour les fichiers sans tours. --%>
         <.laps_panel :if={@laps != []} laps={@laps} />
 
-        <section :if={@laps == [] and @splits != []} class="border-t border-line">
+        <section :if={@laps == [] and @splits != []} class="card">
           <.panel_head title="Portions kilometriques" note={"#{length(@splits)} portions"} />
           <.splits_table splits={@splits} />
         </section>
@@ -213,7 +218,7 @@ defmodule SoleusWeb.ActivityLive do
       |> assign(:fastest, fastest_lap(assigns.laps))
 
     ~H"""
-    <section class="border-t border-line">
+    <section class="card">
       <.panel_head
         title={if @structured?, do: "Seance structuree", else: "Tours"}
         note={"#{length(@laps)} tours"}
@@ -227,7 +232,7 @@ defmodule SoleusWeb.ActivityLive do
         class="flex flex-wrap gap-x-8 gap-y-2 border-y border-line px-5 py-3"
       >
         <div :for={block <- @summary} class="flex items-baseline gap-3">
-          <span class="num text-sm text-signal">
+          <span class="display text-xl text-signal">
             {block.count} x {round(block.distance_m)} m
           </span>
           <span class="num text-xs text-text">{Pace.format(block.avg_speed_ms)}/km</span>
@@ -235,6 +240,24 @@ defmodule SoleusWeb.ActivityLive do
             meilleur {Pace.format(block.best_speed_ms)}
             <span :if={block.avg_hr}>· FC {round(block.avg_hr)}</span>
           </span>
+        </div>
+      </div>
+
+      <%!-- Profil de la seance : un bloc par tour, aussi large que sa duree
+            et aussi haut que sa vitesse. La structure d'un fractionne s'y lit
+            avant meme le tableau. --%>
+      <div class="flex h-28 items-end gap-0.5 px-5 pb-4 pt-2">
+        <div
+          :for={{lap, i} <- Enum.with_index(@laps)}
+          class="grow-y min-w-[3px] rounded-t-md"
+          style={[
+            "flex-grow: #{max(lap.duration_s || 1, 1)};",
+            "height: #{max(lap_bar(lap, @fastest), 8)}%;",
+            "background-color: #{intensity_color(lap.intensity)};",
+            "--i: #{min(i, 30)}"
+          ]}
+          title={"tour #{lap.index + 1} · #{Pace.format(lap.speed_ms)}/km · #{Pace.format_duration(lap.duration_s)}"}
+        >
         </div>
       </div>
 
@@ -267,9 +290,9 @@ defmodule SoleusWeb.ActivityLive do
             </td>
             <td class="num w-20 py-2 pl-4 text-xs text-text">{Pace.format(lap.speed_ms)}</td>
             <td class="py-2 pr-4">
-              <div class="h-1.5 bg-panel-raised">
+              <div class="h-1.5 overflow-hidden rounded-full bg-panel-raised">
                 <div
-                  class="h-full"
+                  class="grow-x h-full rounded-full"
                   style={"width: #{lap_bar(lap, @fastest)}%; background-color: #{intensity_color(lap.intensity)}"}
                 >
                 </div>
@@ -295,10 +318,10 @@ defmodule SoleusWeb.ActivityLive do
     assigns = assign(assigns, :has_details?, has_details?(assigns.activity))
 
     ~H"""
-    <section :if={@has_details?} class="border-t border-line">
+    <section :if={@has_details?} class="card">
       <.panel_head title="Details" note="dynamiques de course et puissance" />
 
-      <div class="grid grid-cols-2 gap-px border-t border-line bg-line sm:grid-cols-3 lg:grid-cols-6">
+      <div class="grid grid-cols-2 gap-2 px-4 pb-4 sm:grid-cols-3 lg:grid-cols-6">
         <.detail
           :if={@activity.grade_adjusted_speed_ms}
           label="allure corrigee"
@@ -424,9 +447,9 @@ defmodule SoleusWeb.ActivityLive do
 
   defp detail(assigns) do
     ~H"""
-    <div class="bg-ink px-5 py-4">
+    <div class="tile px-4 py-3.5">
       <div class="label">{@label}</div>
-      <div class="num mt-1.5 text-lg leading-none text-text">{@value}</div>
+      <div class="display mt-2 text-2xl text-text">{@value}</div>
       <div :if={@note} class="mt-1.5 text-[10px] text-faint">{@note}</div>
     </div>
     """
@@ -448,7 +471,7 @@ defmodule SoleusWeb.ActivityLive do
   defp intensity_color("rest"), do: "var(--color-form)"
   defp intensity_color("warmup"), do: "var(--color-line-bright)"
   defp intensity_color("cooldown"), do: "var(--color-line-bright)"
-  defp intensity_color(_other), do: "var(--color-signal-deep)"
+  defp intensity_color(_other), do: "var(--color-accent)"
 
   defp intensity_style(intensity), do: "color: #{intensity_color(intensity)}"
 
@@ -505,9 +528,9 @@ defmodule SoleusWeb.ActivityLive do
           </td>
           <td class="num w-20 py-2 text-xs text-text">{Pace.format(split.speed_ms)}</td>
           <td class="py-2 pr-5">
-            <div class="h-1.5 bg-panel-raised">
+            <div class="h-1.5 overflow-hidden rounded-full bg-panel-raised">
               <div
-                class="h-full bg-signal"
+                class="grow-x h-full rounded-full bg-signal"
                 style={"width: #{bar_width(split.speed_ms, @slowest, @fastest)}%"}
               >
               </div>
@@ -560,9 +583,9 @@ defmodule SoleusWeb.ActivityLive do
 
   defp panel_head(assigns) do
     ~H"""
-    <div class="flex items-baseline justify-between px-5 pb-3 pt-4">
-      <h2 class="text-[11px] font-semibold uppercase tracking-[0.14em] text-text">{@title}</h2>
-      <span :if={@note} class="label">{@note}</span>
+    <div class="flex items-baseline justify-between gap-4 px-5 pb-3 pt-4">
+      <h2 class="text-sm font-semibold text-text">{@title}</h2>
+      <span :if={@note} class="text-[11px] font-medium text-faint">{@note}</span>
     </div>
     """
   end
@@ -574,13 +597,13 @@ defmodule SoleusWeb.ActivityLive do
 
   defp stat(assigns) do
     ~H"""
-    <div class={["px-4 py-4", @signal && "panel-signal"]}>
+    <div class={["card px-4 py-3.5", @signal && "card-signal"]}>
       <div class="label">{@label}</div>
-      <div class="mt-1.5 flex items-baseline gap-1">
-        <span class={["num text-xl leading-none", if(@signal, do: "text-signal", else: "text-text")]}>
+      <div class="mt-2 flex items-baseline gap-1">
+        <span class={["display text-[2rem]", if(@signal, do: "text-signal", else: "text-text")]}>
           {@value}
         </span>
-        <span :if={@unit} class="text-[10px] text-faint">{@unit}</span>
+        <span :if={@unit} class="text-[11px] font-medium text-faint">{@unit}</span>
       </div>
     </div>
     """

@@ -86,11 +86,16 @@ prédictions. Navigation par **dock macOS en bas**, vues plein écran.
 
 ## Direction artistique
 
-Sombre, dense, esprit instrument de mesure — explicitement **pas** « un truc
-IA revu et revu ». Le **violet est une couleur de signal, jamais un fond**.
-Chiffres en chasse fixe (`.num`), séparations en filets d'un pixel, pas
-d'ombres. Graphiques en SVG généré en Elixir ; le seul JS est trois hooks —
-survol, sélection de zone, carte Leaflet.
+Sportif et moderne, sombre mais pas noir : fond graphite (`ink`), cartes
+arrondies (`.card`) posées dans une pile (`.board`) et séparées par l'espace.
+Le **volt** (`signal`) marque la donnée principale et l'élément actif ; le
+violet (`accent`) est la série secondaire. Grandes valeurs en condensé gras
+(`.display`, Barlow Semi Condensed), les autres chiffres en `.num` (Inter,
+`tabular-nums`). Graphiques en SVG généré en Elixir (`SoleusWeb.Charts` pour
+l'analyse, `SoleusWeb.Viz` pour les pictogrammes : jauge, anneau, colonnes,
+sparkline) ; le seul JS est trois hooks — survol, sélection de zone, carte
+Leaflet. Le mouvement est en CSS seulement : animations d'entrée jouées une
+fois, coupées par `prefers-reduced-motion`.
 
 ## Les pièges, et pourquoi ils existent
 

@@ -106,12 +106,24 @@ Stratégie retenue : RGPD pour amorcer, Personal API pour l'incrémental.
 
 ## Interface
 
-- **Sombre uniquement.** Pas de bascule de thème : c'est un instrument de
-  mesure, pas un site.
-- Le **violet est une couleur de signal**, pas un fond. Il marque la donnée
-  principale et rien d'autre.
-- Tous les chiffres portent la classe `.num` (chasse fixe, `tabular-nums`).
-- Les séparations sont des **filets d'un pixel**, jamais des ombres.
+- **Sombre uniquement**, mais graphite et non noir. Pas de bascule de thème.
+- Les jetons vivent dans le `@theme` de `assets/css/app.css` ; les vues et les
+  graphes n'emploient que ces jetons (`bg-panel`, `var(--color-signal)`…).
+- Le **volt** (`signal`) marque la donnée principale et l'élément actif ; le
+  **violet** (`accent`) est la série secondaire d'un graphe. Cyan pour la
+  forme, orange pour la fatigue, corail pour l'alerte.
+- Une page est une pile `.board` de `.card`. Une carte de tête de rangée peut
+  porter `.card-signal`. Dans une carte, les valeurs vont en `.tile`.
+- Grandes valeurs isolées en `.display` (condensé gras) ; chiffres de tableau
+  en `.num` (`tabular-nums`, pour que les colonnes s'alignent).
+- Les pictogrammes de donnée (jauge, anneau, colonnes, barre, sparkline)
+  vivent dans `SoleusWeb.Viz` ; les réutiliser avant d'en dessiner un nouveau.
+- **Mouvement en CSS uniquement** (`app.css`, section « Mouvement ») : les
+  cartes d'un `.board` montent en cascade, `chart_frame` balaie ses graphes de
+  gauche à droite, `.grow-x` / `.grow-y` / `.ring` / `.pop` remplissent. Ce
+  sont des animations d'entrée, rejouées seulement quand LiveView réinsère
+  l'élément. Pour une capture d'écran de l'état final, lancer Chrome avec
+  `--force-prefers-reduced-motion`.
 - Les graphes sont du **SVG généré en Elixir** (`SoleusWeb.Charts`). La limite
   est connue : au-delà de quelques milliers de points — les séries seconde par
   seconde — il faudra un `canvas` piloté par un hook.

@@ -97,13 +97,18 @@ defmodule SoleusWeb.BodyFigure do
       <%!-- La peau : la silhouette entiere, legerement dilatee depuis son
             centre et floutee. Elle enveloppe le corps, ce qui en fait le
             support naturel de la temperature cutanee. --%>
-      <g
-        filter="url(#skin-blur)"
-        opacity="0.13"
-        fill={color(@states, "peau")}
-        transform="translate(100 285) scale(1.06) translate(-100 -285)"
-      >
-        <path :for={{_region, d} <- @parts} d={d} />
+      <%!-- Le halo respire lentement : seul mouvement continu de
+            l'interface, il signale que la silhouette est une lecture du
+            jour, pas une illustration. --%>
+      <g class="pulse">
+        <g
+          filter="url(#skin-blur)"
+          opacity="0.2"
+          fill={color(@states, "peau")}
+          transform="translate(100 285) scale(1.06) translate(-100 -285)"
+        >
+          <path :for={{_region, d} <- @parts} d={d} />
+        </g>
       </g>
 
       <%!-- Chaque partie : fond opaque, puis teinte et contour. Voir le

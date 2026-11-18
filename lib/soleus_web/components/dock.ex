@@ -38,7 +38,7 @@ defmodule SoleusWeb.Dock do
       class="pointer-events-none fixed inset-x-0 bottom-0 z-50 flex justify-center pb-5"
       aria-label="Navigation principale"
     >
-      <div class="pointer-events-auto flex items-end gap-1 rounded-2xl border border-line-bright bg-panel/70 px-2 py-2 shadow-[0_12px_48px_-12px_rgba(0,0,0,0.9)] backdrop-blur-xl">
+      <div class="pointer-events-auto flex items-end gap-1 rounded-full border border-line-bright bg-panel/80 p-1.5 shadow-[0_16px_48px_-16px_rgba(0,0,0,0.8)] backdrop-blur-xl">
         <.dock_item :for={item <- @items} item={item} current={@current} />
       </div>
     </nav>
@@ -56,30 +56,24 @@ defmodule SoleusWeb.Dock do
       patch={@item.path}
       aria-current={@active? && "page"}
       class={[
-        "group relative flex h-12 w-12 items-center justify-center rounded-xl",
+        "group relative flex h-11 w-11 items-center justify-center rounded-full",
         "transition-[transform,background-color] duration-150 ease-out",
         "hover:-translate-y-2 hover:scale-110",
-        @active? && "bg-signal-wash",
+        @active? && "bg-signal",
         !@active? && "hover:bg-panel-raised"
       ]}
     >
       <span class={[
         @item.icon,
         "h-5 w-5",
-        if(@active?, do: "bg-signal", else: "bg-dim group-hover:bg-text")
+        if(@active?, do: "bg-ink", else: "bg-dim group-hover:bg-text")
       ]} />
 
       <%!-- L'infobulle est au dessus de l'icone, et non en dessous : vers le bas
             elle sortirait de l'ecran, le dock etant deja colle au bord. --%>
-      <span class="pointer-events-none absolute -top-9 whitespace-nowrap rounded-md border border-line-bright bg-panel px-2 py-1 text-[10px] font-medium uppercase tracking-[0.08em] text-text opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+      <span class="pointer-events-none absolute -top-9 whitespace-nowrap rounded-full border border-line-bright bg-panel px-2.5 py-1 text-[11px] font-semibold text-text opacity-0 transition-opacity duration-150 group-hover:opacity-100">
         {@item.label}
       </span>
-
-      <span
-        :if={@active?}
-        class="absolute bottom-0.5 h-[3px] w-[3px] rounded-full bg-signal"
-        aria-hidden="true"
-      />
     </.link>
     """
   end

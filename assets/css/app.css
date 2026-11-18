@@ -12,43 +12,48 @@
 /* ---------------------------------------------------------------------------
    Soleus — jetons de design
 
-   Interface dense et sombre, pensee comme un instrument de mesure et non comme
-   une page d'accueil. Les trois regles qui tiennent l'ensemble :
+   Un tableau de bord de sportif : fond graphite plutot que noir, cartes
+   arrondies posees sur ce fond, et une couleur d'accent franche. Les regles
+   qui tiennent l'ensemble :
 
-     1. le violet est une couleur de signal, pas un fond. Il marque la donnee
-        principale (charge chronique, vitesse critique) et rien d'autre ;
-     2. tous les chiffres sont en chasse fixe et en `tabular-nums`, pour qu'une
-        colonne de valeurs s'aligne et se compare d'un coup d'oeil ;
-     3. les separations sont des filets d'un pixel, jamais des ombres. Une
-        ombre portee suggere de la profondeur, ce qui n'a aucun sens sur un
-        tableau de chiffres.
+     1. le volt est la couleur de signal. Il marque la donnee principale
+        (charge chronique, vitesse critique) et l'element actif, rien d'autre ;
+     2. les chiffres sont en `tabular-nums`, pour qu'une colonne de valeurs
+        s'aligne. Les grandes valeurs isolees passent en condense gras
+        (`.display`), c'est ce qui donne le ton ;
+     3. les cartes se separent par l'espace, pas par des filets. Les filets
+        restent a l'interieur d'une carte, entre les lignes d'un tableau.
 --------------------------------------------------------------------------- */
 
 @theme {
-  --color-ink: #07070a;
-  --color-panel: #0e0e13;
-  --color-panel-raised: #14141b;
-  --color-line: #1f1f29;
-  --color-line-bright: #2e2e3b;
+  --color-ink: #12151b;
+  --color-panel: #1b1f27;
+  --color-panel-raised: #242933;
+  --color-line: #2b303b;
+  --color-line-bright: #3b414e;
 
-  --color-text: #e9e9f0;
-  --color-dim: #8d8d9e;
-  --color-faint: #5c5c6d;
+  --color-text: #f3f5f9;
+  --color-dim: #aeb4c2;
+  --color-faint: #767d8f;
 
-  /* Violet de signal, et ses deux declinaisons utiles : une version saturee
-     pour les traits, une tres diluee pour les aplats. */
-  --color-signal: #7c5cff;
-  --color-signal-deep: #5a3fd6;
-  --color-signal-wash: #1a1533;
+  /* Volt de signal, et sa version tres diluee pour les aplats. */
+  --color-signal: #c6f432;
+  --color-signal-wash: #283117;
 
-  /* Fatigue en ambre, forme en menthe, alerte en rose. Trois teintes, pas
-     plus : au dela, un graphe a plusieurs series devient illisible. */
-  --color-fatigue: #ff9f45;
-  --color-form: #35e0a1;
-  --color-alert: #ff5470;
+  /* Violet secondaire : la serie qui doit rester distincte du signal dans
+     un meme graphe (zone 2, sommeil leger, cadence). */
+  --color-accent: #8b7bff;
 
-  --font-sans: "Inter var", ui-sans-serif, system-ui, -apple-system, sans-serif;
-  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
+  /* Fatigue en orange, forme en cyan, alerte en corail. */
+  --color-fatigue: #ff9440;
+  --color-form: #36d6f0;
+  --color-alert: #ff5272;
+
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-display: "Barlow Semi Condensed", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-num: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+
+  --radius-card: 1.125rem;
 }
 
 @layer base {
@@ -61,21 +66,21 @@
     background-color: var(--color-ink);
     color: var(--color-text);
     font-family: var(--font-sans);
+    font-feature-settings: "cv11" 1, "ss01" 1;
     -webkit-font-smoothing: antialiased;
   }
 
-  /* Toute valeur numerique passe par la chasse fixe. Les chiffres doivent
-     s'empiler exactement, sinon comparer deux lignes d'un tableau demande de
-     lire au lieu de regarder. */
+  /* Les chiffres doivent s'empiler exactement, sinon comparer deux lignes
+     d'un tableau demande de lire au lieu de regarder. */
   .num {
-    font-family: var(--font-mono);
+    font-family: var(--font-num);
     font-variant-numeric: tabular-nums;
     font-feature-settings: "tnum" 1;
   }
 
   ::selection {
-    background-color: var(--color-signal-deep);
-    color: #fff;
+    background-color: var(--color-signal);
+    color: var(--color-ink);
   }
 
   ::-webkit-scrollbar {
@@ -95,36 +100,70 @@
 }
 
 @layer components {
-  /* Micro-libelle : la legende d'une valeur, jamais un titre. Capitales,
-     interlettrage ouvert, et assez petit pour ne pas concurrencer le chiffre
-     qu'il annonce. */
+  /* Grande valeur isolee : condense, gras, serre. C'est le chiffre qu'on lit
+     de loin, comme sur l'ecran d'une montre. */
+  .display {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
+    line-height: 0.95;
+  }
+
+  /* Micro-libelle : la legende d'une valeur, jamais un titre. */
   .label {
-    font-size: 0.625rem;
+    font-size: 0.6875rem;
     font-weight: 500;
-    letter-spacing: 0.1em;
+    letter-spacing: 0.04em;
     text-transform: uppercase;
     color: var(--color-faint);
   }
 
+  /* La page est une pile de cartes. `.board` donne l'espacement, `.card`
+     la surface. */
+  .board {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem 1rem;
+  }
+
+  /* Une carte ne se tasse jamais : quand la pile depasse l'ecran, c'est la
+     page qui defile, pas le contenu des cartes qui se coupe. */
+  .board > * {
+    flex-shrink: 0;
+  }
+
+  .card,
   .panel {
     background-color: var(--color-panel);
     border: 1px solid var(--color-line);
+    border-radius: var(--radius-card);
+    overflow: hidden;
   }
 
-  /* Le filet superieur en violet marque le panneau qui porte la donnee
-     principale de sa rangee. Un seul par rangee : c'est ce qui en fait un
-     accent plutot qu'une decoration. */
+  /* Carte qui porte la donnee principale de sa rangee : un liseré volt en
+     tete et un halo tres dilue. Un seul par rangee. */
+  .card-signal,
   .panel-signal {
-    box-shadow: inset 0 1px 0 0 var(--color-signal);
+    border-color: color-mix(in srgb, var(--color-signal) 35%, var(--color-line));
+    background-image: radial-gradient(
+      120% 90% at 0% 0%,
+      color-mix(in srgb, var(--color-signal) 13%, transparent),
+      transparent 60%
+    );
+  }
+
+  /* Tuile a l'interieur d'une carte : une valeur, son libelle, sa note. */
+  .tile {
+    background-color: var(--color-panel-raised);
+    border-radius: 0.75rem;
   }
 
   .rule {
     border-color: var(--color-line);
   }
 
-  /* Lignes de tableau : le survol eclaire la ligne entiere, sans deplacement
-     ni changement de taille. Un tableau de donnees ne doit pas bouger quand on
-     le parcourt du regard. */
   .row-hover {
     transition: background-color 120ms ease;
   }
@@ -133,20 +172,185 @@
     background-color: var(--color-panel-raised);
   }
 
+  .tile.row-hover:hover {
+    background-color: var(--color-line-bright);
+  }
+
   .chip {
     font-size: 0.625rem;
     font-weight: 600;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.04em;
     text-transform: uppercase;
-    padding: 0.125rem 0.375rem;
-    border: 1px solid var(--color-line-bright);
+    padding: 0.125rem 0.5rem;
+    border-radius: 999px;
+    background-color: var(--color-panel-raised);
     color: var(--color-dim);
   }
 
   .chip-signal {
-    border-color: var(--color-signal-deep);
-    background-color: var(--color-signal-wash);
-    color: var(--color-signal);
+    background-color: var(--color-signal);
+    color: var(--color-ink);
+  }
+
+  /* Controle segmente en pastille : periode, sport. */
+  .segmented {
+    display: flex;
+    align-items: center;
+    gap: 0.125rem;
+    padding: 0.1875rem;
+    border-radius: 999px;
+    background-color: var(--color-panel);
+    border: 1px solid var(--color-line);
+  }
+
+  .segment {
+    padding: 0.3125rem 0.75rem;
+    border-radius: 999px;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: var(--color-faint);
+    transition: background-color 120ms ease, color 120ms ease;
+  }
+
+  .segment:hover {
+    color: var(--color-text);
+  }
+
+  .segment-active,
+  .segment-active:hover {
+    background-color: var(--color-signal);
+    color: var(--color-ink);
+  }
+
+  .field {
+    border: 1px solid var(--color-line-bright);
+    border-radius: 0.625rem;
+    background-color: var(--color-panel-raised);
+    padding: 0.375rem 0.625rem;
+    font-size: 0.75rem;
+    color: var(--color-text);
+  }
+
+  .field:focus {
+    outline: none;
+    border-color: var(--color-signal);
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Mouvement
+
+   Des animations d'entree, jouees une fois quand un element apparait : la
+   page se compose sous les yeux au lieu d'apparaitre d'un bloc. LiveView ne
+   les rejoue que si l'element est reinsere — en changeant de vue, pas a
+   chaque mise a jour d'une valeur. Rien ne bouge en continu, sauf le pouls
+   discret de la silhouette.
+--------------------------------------------------------------------------- */
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+}
+
+@keyframes sweep {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+@keyframes grow-x {
+  from {
+    transform: scaleX(0);
+  }
+}
+
+@keyframes grow-y {
+  from {
+    transform: scaleY(0);
+  }
+}
+
+@keyframes pop {
+  from {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+}
+
+@keyframes fill-ring {
+  from {
+    stroke-dashoffset: 100;
+  }
+}
+
+@keyframes pulse-glow {
+  50% {
+    opacity: 0.55;
+  }
+}
+
+/* Les cartes d'une pile montent l'une apres l'autre. */
+.board > *,
+.rise {
+  animation: rise 520ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  animation-delay: calc(var(--i, 0) * 60ms);
+}
+
+.board > :nth-child(2) { --i: 1; }
+.board > :nth-child(3) { --i: 2; }
+.board > :nth-child(4) { --i: 3; }
+.board > :nth-child(5) { --i: 4; }
+.board > :nth-child(6) { --i: 5; }
+.board > :nth-child(n + 7) { --i: 6; }
+
+/* Les graphiques se tracent de gauche a droite, comme une course qui se
+   deroule. */
+.sweep {
+  animation: sweep 1100ms cubic-bezier(0.3, 0.6, 0.2, 1) 180ms both;
+}
+
+.grow-x {
+  transform-origin: left center;
+  animation: grow-x 800ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  animation-delay: calc(200ms + var(--i, 0) * 50ms);
+}
+
+.grow-y {
+  transform-box: fill-box;
+  transform-origin: bottom center;
+  animation: grow-y 700ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  animation-delay: calc(200ms + var(--i, 0) * 35ms);
+}
+
+.pop {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: pop 420ms cubic-bezier(0.3, 1.4, 0.5, 1) both;
+  animation-delay: calc(150ms + var(--i, 0) * 6ms);
+}
+
+/* Anneau de jauge : un cercle dont `pathLength` vaut 100, rempli par
+   `stroke-dasharray`. */
+.ring {
+  animation: fill-ring 1200ms cubic-bezier(0.2, 0.7, 0.2, 1) 250ms both;
+}
+
+.pulse {
+  animation: pulse-glow 3.2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
   }
 }
 
@@ -167,7 +371,7 @@
    evite d'avoir a payer un fond de carte sombre, au prix d'un rendu un peu
    plat sur les zones tres colorees. */
 .leaflet-tile-pane {
-  filter: invert(1) hue-rotate(185deg) brightness(0.92) contrast(0.88) saturate(0.55);
+  filter: invert(1) hue-rotate(185deg) brightness(1.05) contrast(0.85) saturate(0.5);
 }
 
 .leaflet-control-attribution {
@@ -192,6 +396,7 @@
 }
 
 .leaflet-tooltip {
+  border-radius: 0.5rem;
   background: var(--color-panel);
   border: 1px solid var(--color-line-bright);
   color: var(--color-text);

@@ -68,15 +68,15 @@ defmodule SoleusWeb.Charts do
     >
       <div
         data-hover-line
-        class="pointer-events-none absolute inset-y-0 hidden w-px bg-line-bright"
+        class="pointer-events-none absolute inset-y-0 z-10 hidden w-px bg-signal/60"
       >
       </div>
       <div
         data-hover-card
-        class="pointer-events-none absolute top-1 z-10 hidden min-w-[10rem] border border-line-bright bg-panel/95 px-2.5 py-2 shadow-lg backdrop-blur"
+        class="pointer-events-none absolute top-1 z-10 hidden min-w-[10rem] rounded-xl border border-line-bright bg-panel/95 px-3 py-2 shadow-lg backdrop-blur"
       >
       </div>
-      {render_slot(@inner_block)}
+      <div class="sweep">{render_slot(@inner_block)}</div>
     </div>
     """
   end
@@ -187,8 +187,8 @@ defmodule SoleusWeb.Charts do
             y={py + 3}
             text-anchor="end"
             fill="var(--color-faint)"
-            font-size="9"
-            font-family="var(--font-mono)"
+            font-size="10.5"
+            font-family="var(--font-num)"
           >
             {round(value)}
           </text>
@@ -201,8 +201,9 @@ defmodule SoleusWeb.Charts do
             y={@y.(day.load)}
             width={@bar_width}
             height={max(@baseline - @y.(day.load), 0.5)}
-            fill="var(--color-signal)"
+            fill="var(--color-dim)"
             opacity="0.22"
+            rx="1"
           />
         </g>
 
@@ -210,10 +211,16 @@ defmodule SoleusWeb.Charts do
           d={@atl_path}
           fill="none"
           stroke="var(--color-fatigue)"
-          stroke-width="1.2"
-          opacity="0.85"
+          stroke-width="1.5"
+          opacity="0.9"
         />
-        <path d={@ctl_path} fill="none" stroke="var(--color-signal)" stroke-width="2" />
+        <path
+          d={@ctl_path}
+          fill="none"
+          stroke="var(--color-signal)"
+          stroke-width="2.5"
+          stroke-linejoin="round"
+        />
 
         <g>
           <text
@@ -222,8 +229,8 @@ defmodule SoleusWeb.Charts do
             y={@height - 6}
             text-anchor="middle"
             fill="var(--color-faint)"
-            font-size="9"
-            font-family="var(--font-mono)"
+            font-size="10.5"
+            font-family="var(--font-num)"
           >
             {label}
           </text>
@@ -275,7 +282,7 @@ defmodule SoleusWeb.Charts do
     ~H"""
     <svg
       viewBox={"0 0 #{@width} #{@height}"}
-      class={@class}
+      class={["sweep", @class]}
       style={aspect(@width, @height)}
       role="img"
     >
@@ -381,8 +388,8 @@ defmodule SoleusWeb.Charts do
               y={py + 3}
               text-anchor="end"
               fill="var(--color-faint)"
-              font-size="9"
-              font-family="var(--font-mono)"
+              font-size="10.5"
+              font-family="var(--font-num)"
             >
               {label}
             </text>
@@ -423,8 +430,8 @@ defmodule SoleusWeb.Charts do
               y={@height - 7}
               text-anchor="middle"
               fill="var(--color-faint)"
-              font-size="9"
-              font-family="var(--font-mono)"
+              font-size="10.5"
+              font-family="var(--font-num)"
             >
               {label}
             </text>
@@ -522,8 +529,8 @@ defmodule SoleusWeb.Charts do
               y={py + 3}
               text-anchor="end"
               fill="var(--color-faint)"
-              font-size="9"
-              font-family="var(--font-mono)"
+              font-size="10.5"
+              font-family="var(--font-num)"
             >
               {label}
             </text>
@@ -618,8 +625,8 @@ defmodule SoleusWeb.Charts do
               y={py + 3}
               text-anchor="end"
               fill="var(--color-faint)"
-              font-size="9"
-              font-family="var(--font-mono)"
+              font-size="10.5"
+              font-family="var(--font-num)"
             >
               {label}
             </text>
@@ -721,7 +728,7 @@ defmodule SoleusWeb.Charts do
   @zone_colors [
     "var(--color-line-bright)",
     "var(--color-form)",
-    "var(--color-signal-deep)",
+    "var(--color-accent)",
     "var(--color-signal)",
     "var(--color-fatigue)",
     "var(--color-alert)"
@@ -773,19 +780,19 @@ defmodule SoleusWeb.Charts do
 
       ~H"""
       <div class={@class}>
-        <div class="flex h-7 w-full overflow-hidden">
+        <div class="grow-x flex h-7 w-full gap-0.5 overflow-hidden rounded-lg">
           <div
             :for={segment <- @segments}
             class="group relative h-full"
-            style={"width: #{Float.round(segment.share, 2)}%; background-color: #{segment.color}; opacity: 0.85"}
+            style={"width: #{Float.round(segment.share, 2)}%; background-color: #{segment.color}"}
             title={"Zone #{segment.index} · #{Pace.format_duration(segment.seconds)} · #{round(segment.share)} %"}
           >
           </div>
         </div>
 
-        <div class="mt-3 grid grid-cols-2 gap-x-6 gap-y-1.5 sm:grid-cols-3 lg:grid-cols-6">
+        <div class="mt-3 grid grid-cols-2 gap-x-6 gap-y-1.5 sm:grid-cols-3">
           <div :for={segment <- @segments} class="flex items-baseline gap-2">
-            <span class="h-2 w-2 shrink-0" style={"background-color: #{segment.color}"}></span>
+            <span class="h-2 w-2 shrink-0 rounded-full" style={"background-color: #{segment.color}"}></span>
             <span class="text-[10px] text-dim">
               Z{segment.index}
               <span :if={segment.floor} class="text-faint">
@@ -880,8 +887,8 @@ defmodule SoleusWeb.Charts do
             x={week * 14 + 24}
             y="10"
             fill="var(--color-faint)"
-            font-size="8"
-            font-family="var(--font-mono)"
+            font-size="5.5"
+            font-family="var(--font-num)"
           >
             {label}
           </text>
@@ -892,8 +899,8 @@ defmodule SoleusWeb.Charts do
             y={row * 14 + 29}
             text-anchor="end"
             fill="var(--color-faint)"
-            font-size="7"
-            font-family="var(--font-mono)"
+            font-size="5"
+            font-family="var(--font-num)"
           >
             {label}
           </text>
@@ -904,7 +911,9 @@ defmodule SoleusWeb.Charts do
             y={cell.weekday * 14 + 18}
             width="11"
             height="11"
-            rx="1.5"
+            rx="2.5"
+            class="pop"
+            style={"--i: #{cell.week}"}
             fill={if cell.load > 0, do: "var(--color-signal)", else: "var(--color-panel-raised)"}
             fill-opacity={if cell.load > 0, do: 0.18 + cell.intensity * 0.8, else: 1}
           />
@@ -957,7 +966,7 @@ defmodule SoleusWeb.Charts do
   @phases [
     {:sleep_deep_s, "profond", "var(--color-signal)"},
     {:sleep_rem_s, "paradoxal", "var(--color-form)"},
-    {:sleep_light_s, "leger", "var(--color-signal-deep)"},
+    {:sleep_light_s, "leger", "var(--color-accent)"},
     {:sleep_awake_s, "eveil", "var(--color-alert)"}
   ]
 
@@ -1026,8 +1035,8 @@ defmodule SoleusWeb.Charts do
               y={py + 3}
               text-anchor="end"
               fill="var(--color-faint)"
-              font-size="9"
-              font-family="var(--font-mono)"
+              font-size="10.5"
+              font-family="var(--font-num)"
             >
               {label}
             </text>
@@ -1275,8 +1284,8 @@ defmodule SoleusWeb.Charts do
               y={py + 3}
               text-anchor="end"
               fill="var(--color-faint)"
-              font-size="9"
-              font-family="var(--font-mono)"
+              font-size="10.5"
+              font-family="var(--font-num)"
             >
               {label}
             </text>
@@ -1291,8 +1300,8 @@ defmodule SoleusWeb.Charts do
               y={@height - 5}
               text-anchor="middle"
               fill="var(--color-faint)"
-              font-size="9"
-              font-family="var(--font-mono)"
+              font-size="10.5"
+              font-family="var(--font-num)"
             >
               {label}
             </text>
