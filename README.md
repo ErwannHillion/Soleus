@@ -4,6 +4,17 @@ Tableau de bord d'entrainement en course a pied : suivi des seances, modeles
 physiologiques, et projection de progression. Les donnees viennent d'une
 montre Garmin.
 
+![Accueil de Soleus](docs/screenshots/accueil.png)
+
+## Apercu
+
+| | |
+| --- | --- |
+| ![Forme](docs/screenshots/forme.png) **Forme** — charge et forme, calendrier, intensite | ![Seances](docs/screenshots/seances.png) **Seances** — volume hebdomadaire et liste |
+| ![Seance](docs/screenshots/seance.png) **Seance** — trace, series, tours | ![Courbe](docs/screenshots/courbe.png) **Courbe** — vitesse-duree et records |
+| ![Corps](docs/screenshots/corps.png) **Corps** — sante et lignes de base | ![Comparer](docs/screenshots/compare.png) **Comparer** — deux periodes cote a cote |
+| ![Predictions](docs/screenshots/predictions.png) **Predictions** — modele et temps de course | ![Plan](docs/screenshots/plan.png) **Plan** — trame vers une course datee |
+
 ## Ce que fait Soleus
 
 - **Ingestion** des fichiers `.fit` Garmin, idempotente (l'empreinte du
@@ -58,18 +69,73 @@ Trois chemins, complementaires :
 La combinaison retenue est l'export RGPD pour amorcer l'historique, puis la
 Personal API pour l'incremental quotidien.
 
-### Import de l'export RGPD
+### Charger son historique dans le tableau de bord
 
-```sh
-unzip -d priv/import/fit <export>/DI_CONNECT/DI-Connect-Uploaded-Files/UploadedFiles_*.zip
-mix soleus.import
-mix soleus.enrich <export>/DI_CONNECT/DI-Connect-Fitness/*_summarizedActivities.json
-mix soleus.rebuild
+C'est l'etape a faire une fois, a l'installation. Sans elle le tableau de bord
+est vide (ou montre l'historique de demonstration).
+
+**1. Demander l'export a Garmin.** Sur Garmin Connect : *Compte* → *Gestion
+des donnees* → *Exporter vos donnees*
+(<https://www.garmin.com/account/datamanagement/exportdata/>). Garmin prepare
+l'archive puis envoie un lien de telechargement par email ; compter de
+quelques heures a quelques jours.
+
+**2. Decompresser l'archive**, par exemple dans `~/Documents/data_garmin`. La
+seule partie utile est le dossier `DI_CONNECT` :
+
+```text
+data_garmin/DI_CONNECT/
+├── DI-Connect-Uploaded-Files/UploadedFiles_*.zip   les fichiers .fit des seances
+├── DI-Connect-Fitness/*_summarizedActivities.json  noms, zones et details des seances
+└── DI-Connect-Wellness/                           sommeil, HRV, stress, lignes de base
 ```
 
+**3. Lancer les imports, dans cet ordre** (base demarree, application
+arretee : chaque tache demarre l'application et prend le port 4006) :
+
+```sh
+EXPORT=~/Documents/data_garmin/DI_CONNECT
+
+# les fichiers .fit des seances, decompresses ou l'import les attend
+unzip -o -d priv/import/fit "$EXPORT"/DI-Connect-Uploaded-Files/UploadedFiles_*.zip
+
+mix soleus.import                                                      # seances
+mix soleus.enrich "$EXPORT"/DI-Connect-Fitness/*_summarizedActivities.json   # noms, zones, details
+mix soleus.wellness "$EXPORT"                                          # sante quotidienne
+mix soleus.rebuild                                                     # metriques, charge, modeles
+```
+
+| Tache | Ce qu'elle fait |
+| --- | --- |
+| `soleus.import` | lit chaque `.fit` de `priv/import/fit` (sous-dossiers compris) et cree les seances, leurs series, tours et efforts records |
+| `soleus.enrich` | complete les seances avec le resume de Garmin : nom, zones de frequence, champs absents du `.fit` |
+| `soleus.wellness` | importe le sommeil, la HRV, la frequence au repos, le stress, la reserve d'energie et les lignes de base personnelles |
+| `soleus.rebuild` | recalcule tout ce qui se deduit des seances : charge, forme, vitesse critique, predictions |
+
+`soleus.rebuild` n'est pas facultatif : les imports ne calculent aucune
+metrique, et sans lui les pages Forme, Courbe et Predictions restent vides.
+
+**4. Verifier**, puis lancer le serveur :
+
+```sh
+mix run -e 'IO.inspect(Soleus.Repo.aggregate(Soleus.Training.Activity, :count), label: "seances")'
+mix phx.server   # http://localhost:4006
+```
+
+Tout est **reexecutable sans risque** : l'empreinte de chaque fichier sert de
+cle, et la sante s'ecrit par date. Pour ajouter un export plus recent,
+recommencer les etapes 2 et 3 ; seules les nouveautes sont ajoutees.
+
 Un export contient surtout des fichiers qui ne sont pas des seances : sur
-8 675 fichiers, 131 sont des activites, le reste etant du suivi quotidien et
-de la HRV nocturne. L'import les ecarte tout seul.
+8 675 fichiers, 134 sont des activites, le reste etant du suivi quotidien et
+de la HRV nocturne. L'import les ecarte tout seul. Le dossier `priv/import/`
+est ignore par git : les donnees ne quittent pas la machine.
+
+`mix soleus.laps` ne sert qu'a une base importee avec une ancienne version de
+Soleus : il relit les tours et les dynamiques de course sans tout reimporter.
+
+Ensuite, pour ne plus avoir a refaire d'export, brancher la Personal API
+ci-dessous : elle prend le relais pour les nouvelles seances.
 
 ### Brancher la Personal API
 
@@ -150,15 +216,15 @@ projection n'a aucune pente a extrapoler.
 
 | Page | Contenu |
 | --- | --- |
-| Accueil | vue d'ensemble : forme, charge, etat du jour, modele, predictions |
-| Forme | charge et forme sur la periode, confrontation a Garmin |
-| Seances | liste filtrable par sport ; une ligne ouvre le detail |
-| Seance | trace OpenStreetMap lie aux graphiques, tours de la montre, dynamiques de course |
+| Accueil | jauge de forme, semaine jour par jour, tendance de vitesse critique, signaux, temps de course predits, dernieres seances |
+| Forme | charge et forme sur la periode avec tendances, calendrier de charge, intensite par allure et par frequence, confrontation a Garmin |
+| Seances | totaux de la periode, volume par semaine, liste filtrable par sport ; une ligne ouvre le detail |
+| Seance | trace OpenStreetMap lie aux graphiques, profil et tableau des tours, dynamiques de course |
 | Courbe | courbe vitesse-duree, progression de la vitesse critique, records |
-| Corps | schema corporel, mesures de sante, sommeil, comparaison |
-| Comparer | deux periodes arbitraires cote a cote |
-| Predictions | modele, temps predits, objectifs dates |
-| Plan | plan d'entrainement vers une course datee |
+| Corps | schema corporel, mesures de sante situees dans leur normale, sommeil, comparaison |
+| Comparer | deux periodes arbitraires, en barres cote a cote |
+| Predictions | modele, echelle des allures d'entrainement, temps predits, objectifs dates |
+| Plan | plan d'entrainement vers une course datee, charge par semaine et par phase |
 
 L'accueil ouvre sur un panneau **A regarder** : les signaux derives des
 mesures, et rien d'autre. Un signal dit ce qu'il a vu, pas ce qu'il faut
@@ -168,6 +234,20 @@ signal est un resultat valable, pas un panneau vide.
 Tous les graphiques se lisent au survol. La periode se choisit en haut a
 droite, et une zone se definit directement au curseur sur le graphique de
 charge.
+
+## L'interface
+
+Sombre mais pas noire : un fond graphite, des cartes arrondies, un accent
+volt pour la donnee principale et l'element actif. Les grandes valeurs sont
+en condense gras, lisibles de loin comme sur l'ecran d'une montre.
+
+Chaque page se compose a l'ouverture : les cartes montent en cascade, les
+courbes se tracent de gauche a droite, barres et anneaux se remplissent. Tout
+est en CSS, joue une seule fois, et coupe quand le systeme demande moins de
+mouvement. Les graphiques sont du SVG genere cote serveur ; le JavaScript se
+limite au survol, a la selection d'une zone et a la carte.
+
+La navigation passe par le dock en bas de l'ecran.
 
 ## Le plan d'entrainement
 
