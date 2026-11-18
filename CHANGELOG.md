@@ -20,7 +20,8 @@ fichier, au format [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 
 ### Added
 
-- Licence MIT
+- Licence CC BY-NC-SA 4.0 : code ouvert, usage commercial interdit, versions
+  derivees sous la meme licence
 - Ingestion idempotente des fichiers FIT Garmin, via le NIF Rust `fit_file`
 - Métriques par séance : charge d'entraînement, TRIMP, facteur d'intensité,
   découplage aérobie

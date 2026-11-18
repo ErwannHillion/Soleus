@@ -332,4 +332,16 @@ s'appliquent. Les trois principaux :
 
 ## Licence
 
-Distribue sous licence MIT. Voir [`LICENSE`](LICENSE).
+Copyright (c) 2026 Erwann Hillion (SHDXW).
+
+Le code est ouvert, mais pas libre de droits commerciaux. Il est distribue
+sous licence [Creative Commons BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/) :
+
+- **Attribution** : toute reutilisation cite l'auteur et la licence ;
+- **Pas d'usage commercial** : interdit de tirer profit de ce travail, de le
+  vendre ou de l'integrer a une offre payante ;
+- **Partage dans les memes conditions** : une version modifiee ou derivee
+  doit etre publiee sous cette meme licence, donc rester gratuite et sans
+  profit.
+
+Le texte qui fait foi est dans [`LICENSE`](LICENSE).
